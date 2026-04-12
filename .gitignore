@@ -1,0 +1,11 @@
+.DS_Store
+*.log
+*.swp
+.vscode/
+.idea/
+node_modules/
+dist/
+build/
+
+# Project notes from adjacent projects that were dropped here by mistake
+QRCodesCLAUDE.md
