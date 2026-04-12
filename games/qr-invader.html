@@ -39,6 +39,10 @@ canvas{display:block;max-width:calc(100vw - 20px);height:auto}
 #maze-text:focus{border-color:#1D9E75}
 #maze-go{background:transparent;color:#1D9E75;border:1px solid #ddd;font-family:ui-monospace,Menlo,'SF Mono',Consolas,monospace;font-size:11px;padding:7px 14px;border-radius:4px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .15s;white-space:nowrap}
 #maze-go:hover{background:#1D9E75;color:#fff;border-color:#1D9E75}
+#maze-export{display:flex;gap:6px;width:420px;max-width:calc(100vw - 40px);margin-top:6px;align-items:center}
+#export-size{background:#fff;border:1px solid #ddd;color:#333;font-family:ui-monospace,Menlo,'SF Mono',Consolas,monospace;font-size:12px;padding:6px 8px;border-radius:4px;outline:none;cursor:pointer;-webkit-appearance:none;appearance:none}
+.exp-btn{flex:1;background:transparent;color:#888;border:1px solid #ddd;font-family:ui-monospace,Menlo,'SF Mono',Consolas,monospace;font-size:11px;padding:6px 10px;border-radius:4px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .15s;text-align:center}
+.exp-btn:hover{color:#1D9E75;border-color:#1D9E75}
 </style>
 </head>
 <body>
@@ -64,6 +68,16 @@ canvas{display:block;max-width:calc(100vw - 20px);height:auto}
   <div id="maze-input">
     <input id="maze-text" type="text" placeholder="maze text / url" spellcheck="false" autocomplete="off">
     <button id="maze-go" type="button">regenerate</button>
+  </div>
+  <div id="maze-export">
+    <select id="export-size">
+      <option value="256">256px</option>
+      <option value="512" selected>512px</option>
+      <option value="1024">1024px</option>
+      <option value="2048">2048px</option>
+    </select>
+    <button class="exp-btn" id="dl-svg" type="button">svg</button>
+    <button class="exp-btn" id="dl-png" type="button">png</button>
   </div>
 </div>
 <script src="qr-lab/vendor/qrcode-gen.js"></script>
@@ -507,6 +521,45 @@ function regenerateMaze(newText){
     history.replaceState(null,'',u.toString());
   }catch(e){}
 }
+
+// ── QR export (original maze, not the partially destroyed version) ─────────
+function exportQR(format){
+  const px=parseInt(document.getElementById('export-size').value)||512;
+  const n=QR.length;
+  const quiet=4;
+  const mod=Math.floor(px/(n+quiet*2));
+  const total=(n+quiet*2)*mod;
+  if(format==='svg'){
+    let paths='';
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+      if(QR[r][c]) paths+='M'+((c+quiet)*mod)+' '+((r+quiet)*mod)+'h'+mod+'v'+mod+'h-'+mod+'z';
+    }
+    const svg='<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+total+' '+total+'" width="'+total+'" height="'+total+'"><rect width="'+total+'" height="'+total+'" fill="#fff"/><path d="'+paths+'" fill="#000"/></svg>';
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
+    a.download='qr-'+total+'px.svg';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } else {
+    const cv=document.createElement('canvas');
+    cv.width=total; cv.height=total;
+    const cx=cv.getContext('2d');
+    cx.fillStyle='#fff'; cx.fillRect(0,0,total,total);
+    cx.fillStyle='#000';
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+      if(QR[r][c]) cx.fillRect((c+quiet)*mod,(r+quiet)*mod,mod,mod);
+    }
+    cv.toBlob(b=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(b);
+      a.download='qr-'+total+'px.png';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    },'image/png');
+  }
+}
+document.getElementById('dl-svg').addEventListener('click',()=>exportQR('svg'));
+document.getElementById('dl-png').addEventListener('click',()=>exportQR('png'));
 
 placeInvader();
 updateMeter();
