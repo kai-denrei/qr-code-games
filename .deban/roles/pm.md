@@ -15,6 +15,7 @@ Owns *why this exists* and *what "done" looks like* for each iteration. Keeps th
 |---|---|---|---|
 | 2026-04-12 | First milestone is scaffold + landing page + two imported games. Gameplay tuning deferred. | Get the selection flow working before investing in mechanics. Cheap to throw away. | [[dev]], [[ux]] |
 | 2026-04-12 | Scope is "several iterations" of the same core mechanic, not a single polished game. | The series *is* the product — each iteration is an experiment on a destruction pattern. | [[arch]] |
+| 2026-04-12 | The two games intentionally diverge in interaction model. Invader = clockwork demo, Snake = active time trial. | After several rounds of tuning, each game settled into a different player-agency shape. Forcing them to share a model would lose what each already does well. | [[dev]], [[ux]] |
 
 ## Dead Ends
 <!-- APPEND ONLY. Never delete. -->
@@ -38,4 +39,5 @@ Blocked by:
 Feeds into: [[dev]], [[ux]]
 
 ## Session Log
+- 2026-04-12 — Two games diverged into distinct interaction models (demo vs time-trial). v1 considered feature-complete and pushed for review.
 - 2026-04-12 — Brief recorded. 3 untested assumptions and 3 open questions surfaced during init challenge.

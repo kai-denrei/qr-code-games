@@ -76,15 +76,18 @@ let lastStep=0;
 
 // Rage is a scheduled burst, not a slow accumulator.
 // Long calm → short visible 1.5 s color buildup → fire → long calm again.
-let anger=0;                  // float 0..ANGER_MAX, derived from rage timer
+let anger=0;                  // float 0..ANGER_MAX, snapped to phase within rage
 const ANGER_MAX=4;
-const RAGE_MS=1500;           // duration of the visible color ramp
+// Phase-based rage: lingers on frustration, then quickly escalates to the shot.
+const FRUSTRATED_MS=1500;     // orange "frustrated" dwell
+const RED_MS=450;             // red "angry"
+const DARK_RED_MS=450;        // dark red "angry" (peak)
 const CALM_MIN=7000;          // shortest chill between bursts
 const CALM_MAX=13000;         // longest chill between bursts
 let rageStart=0;              // timestamp when current rage began, 0 = calm
 let nextRageAt=0;             // scheduled start of next rage
 let gleeUntil=0;              // ts past which the post-fire glee fades
-const GLEE_MS=1200;
+const GLEE_MS=2000;
 
 function scheduleNextRage(now){
   nextRageAt=now+CALM_MIN+Math.random()*(CALM_MAX-CALM_MIN);
@@ -92,10 +95,10 @@ function scheduleNextRage(now){
 
 let bullets=[], particles=[];
 
-// Intro animation — a large ship descends from above and shrinks into the maze.
+// Intro animation — flies in from off-frame, hovers huge in center, spirals down.
 let intro=true;
 let introStart=0;
-const INTRO_MS=2600;
+const INTRO_MS=4000;
 
 function isProtected(r,c){
   return (r<=6&&c<=6)||(r<=6&&c>=22)||(r>=22&&c<=6);
@@ -204,7 +207,7 @@ function currentEmotion(ts){
   return       {name:'angry',      core:'#8B0000', glow:'rgba(139,0,0,0.95)'};
 }
 
-let lastEmotionName='determined';
+let lastEmotionName='';
 const TERM_COLORS={
   determined:'#7F77DD',
   frustrated:'#EF9F27',
@@ -216,8 +219,8 @@ const TERM_COLORS={
 const BRAILLE_FACES={
   determined:'\u2824\u2844\u28A0\u2824\n\u2800\u2820\u2804\u2800',
   frustrated:'\u2820\u2844\u28A0\u2804\n\u2820\u2824\u2824\u2804',
-  angry:     '\u28A2\u2840\u2880\u2814\n\u2800\u2824\u2824\u2800',
-  glee:      '\u28A8\u2845\u28A8\u2845\n\u28A2\u28C0\u28C0\u2814'
+  angry:     '\u2822\u2840\u2880\u2814\n\u2800\u2824\u2824\u2800',
+  glee:      '\u28A8\u2845\u28A8\u2845\n\u2822\u28C0\u28C0\u2814'
 };
 function setTerminalEmotion(name){
   if(name===lastEmotionName) return;
@@ -263,31 +266,62 @@ function drawIntroInvader(x,y,s,glowBlur){
 }
 
 function renderIntro(ts,prog){
-  // Ease-in cubic: slow hover, then accelerating dive into the maze
-  const ease=prog*prog*prog;
-  const startX=CW/2, startY=QY/2;
+  // Three phases over 4 s:
+  //   P1 (0 → 0.30): straight-at-viewer zoom, dead-center, tiny → huge
+  //   P2 (0.30 → 0.55): 1 s hover dead-center at MAX_SCALE
+  //   P3 (0.55 → 1.0): spiral descent into the maze cell
+  const P1=0.30;
+  const P2=0.55;
   const end=cellCenter(invR,invC);
-  const x=startX+(end.x-startX)*ease;
-  const y=startY+(end.y-startY)*ease;
+  const centerX=CW/2;
+  const centerY=CH/2;
+  const MAX_SCALE=16;          // 14x8 sprite → 224x128 at peak ("in your face")
 
-  // Shrink from 5x to 1x as it descends
-  const scaleF=5-ease*4;
-  const s=Math.max(1,Math.round(scaleF));
+  let x,y,s,glowBlur;
 
-  // Slight hover bob while still high up
-  const bob=Math.sin(ts*0.009)*(1-ease)*2.5;
-  const glow=4+(1-ease)*16;
+  if(prog<P1){
+    // Enter from above the frame, diving straight toward the viewer
+    const t=prog/P1;
+    const ease=t*t;                           // ease-in: accelerating approach
+    const startX=centerX, startY=-140;
+    x=startX+(centerX-startX)*ease;
+    y=startY+(centerY-startY)*ease;
+    const scaleF=1+(MAX_SCALE-1)*ease;        // 1 → 16
+    s=Math.max(1,Math.round(scaleF));
+    glowBlur=4+ease*40;
+  } else if(prog<P2){
+    // Hold huge dead-center for ~1 s, bob + pulsing halo
+    const bob=Math.sin(ts*0.007)*4;
+    x=centerX;
+    y=centerY+bob;
+    s=MAX_SCALE;
+    glowBlur=42+Math.sin(ts*0.013)*8;
+  } else {
+    // Spiral descent from center to the spawn cell, shrinking 16 → 1
+    const t=(prog-P2)/(1-P2);
+    const ease=t*t;                           // ease-in: accelerating dive
+    const baseX=centerX+(end.x-centerX)*ease;
+    const baseY=centerY+(end.y-centerY)*ease;
+    const turns=2.5;
+    const spiralR=110*(1-ease);
+    const angle=t*turns*Math.PI*2;
+    x=baseX+Math.cos(angle)*spiralR;
+    y=baseY+Math.sin(angle)*spiralR;
+    const scaleF=MAX_SCALE-(MAX_SCALE-1)*ease;// 16 → 1
+    s=Math.max(1,Math.round(scaleF));
+    glowBlur=42-ease*38;
+  }
 
-  const {pw,ph}=drawIntroInvader(x,y+bob,s,glow);
+  const {pw,ph}=drawIntroInvader(x,y,s,glowBlur);
 
-  // Engine trail while the ship is still large
-  if(Math.random()<0.55 && prog<0.92){
+  // Engine trail throughout the intro
+  if(Math.random()<0.55 && prog<0.95){
     particles.push({
       x:x+(Math.random()-0.5)*pw*0.55,
-      y:y+ph/2+bob,
-      vx:(Math.random()-0.5)*0.5,
-      vy:0.7+Math.random()*1.6,
-      life:0.85,
+      y:y+ph/2,
+      vx:(Math.random()-0.5)*0.8,
+      vy:0.6+Math.random()*1.8,
+      life:0.9,
       col:Math.random()>0.5?'#7F77DD':'#534AB7'
     });
   }
@@ -312,9 +346,14 @@ function loop(ts){
       anger=0;
       if(ts>=nextRageAt) rageStart=ts;
     } else {
-      const t=(ts-rageStart)/RAGE_MS;
-      anger=Math.min(ANGER_MAX, t*ANGER_MAX);
-      if(t>=1){
+      const e=ts-rageStart;
+      const redAt=FRUSTRATED_MS;
+      const darkAt=FRUSTRATED_MS+RED_MS;
+      const fireAt=FRUSTRATED_MS+RED_MS+DARK_RED_MS;
+      if(e<redAt)         anger=1.2;      // stage 1: frustrated (dwells ~1.5 s)
+      else if(e<darkAt)   anger=2.2;      // stage 2: angry (red)
+      else if(e<fireAt)   anger=3.2;      // stage 3: angry (dark red)
+      else {
         fireRandom();
         anger=0;
         rageStart=0;
@@ -383,6 +422,7 @@ function loop(ts){
 
 placeInvader();
 updateMeter();
+setTerminalEmotion('determined'); // show the default face immediately
 requestAnimationFrame(loop);
 </script>
 </body>
