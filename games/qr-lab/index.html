@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>lucidqr — QR Lab</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@400;500;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{
+  background:#0d0d12;
+  color:#d3d3dc;
+  font-family:'Inter',system-ui,sans-serif;
+  padding:48px 20px 80px;
+  background-image:
+    radial-gradient(circle at 18% 8%, rgba(93,202,165,0.06), transparent 42%),
+    radial-gradient(circle at 82% 92%, rgba(159,151,232,0.05), transparent 42%);
+}
+
+/* top chrome */
+#back{position:fixed;top:14px;left:14px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#555;text-decoration:none;padding:6px 10px;border:1px solid #2a2a3a;border-radius:4px;background:#14141e;transition:color .15s,border-color .15s;font-family:'Share Tech Mono',monospace;z-index:2}
+#back:hover{color:#5DCAA5;border-color:#5DCAA5}
+#share{position:fixed;top:14px;right:14px;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#555;padding:6px 10px;border:1px solid #2a2a3a;border-radius:4px;background:#14141e;cursor:pointer;transition:color .15s,border-color .15s;z-index:2}
+#share:hover,#share.copied{color:#5DCAA5;border-color:#5DCAA5}
+
+#wrap{max-width:980px;margin:0 auto}
+
+header{text-align:center;margin-bottom:36px}
+h1{font-family:'Share Tech Mono',monospace;font-size:30px;letter-spacing:.22em;color:#eee;text-transform:uppercase;text-shadow:0 0 16px rgba(93,202,165,.28)}
+.tag{font-size:12px;letter-spacing:.14em;color:#6a6a80;margin-top:10px;text-transform:uppercase;font-family:'Share Tech Mono',monospace}
+
+/* cards */
+.card{
+  background:#14141e;
+  border:1px solid #25252e;
+  border-radius:6px;
+  padding:22px 24px;
+  margin-bottom:22px;
+  box-shadow:0 2px 16px rgba(0,0,0,0.32);
+}
+.card h2{
+  font-family:'Share Tech Mono',monospace;
+  font-size:11px;
+  letter-spacing:.16em;
+  color:#5DCAA5;
+  text-transform:uppercase;
+  margin-bottom:16px;
+}
+
+/* input card */
+#in-text{
+  width:100%;
+  background:#0b0b11;
+  border:1px solid #25252e;
+  color:#d3d3dc;
+  font-family:'Share Tech Mono',monospace;
+  font-size:13px;
+  padding:11px 13px;
+  border-radius:4px;
+  outline:none;
+  transition:border-color .15s;
+}
+#in-text:focus{border-color:#5DCAA5}
+.row{display:flex;align-items:center;gap:18px;margin-top:14px;flex-wrap:wrap}
+.field{display:flex;align-items:center;gap:8px;font-size:12px;color:#8a8a98;letter-spacing:.08em;text-transform:uppercase;font-family:'Share Tech Mono',monospace}
+.ecc-group{display:flex;gap:2px}
+.ecc-btn{
+  background:#0b0b11;
+  color:#8a8a98;
+  border:1px solid #25252e;
+  padding:6px 12px;
+  font-family:'Share Tech Mono',monospace;
+  font-size:11px;
+  letter-spacing:.1em;
+  cursor:pointer;
+  transition:all .15s;
+}
+.ecc-btn:first-child{border-radius:4px 0 0 4px}
+.ecc-btn:last-child{border-radius:0 4px 4px 0}
+.ecc-btn:hover{color:#d3d3dc;border-color:#3a3a4a}
+.ecc-btn.on{background:#5DCAA5;color:#0b0b11;border-color:#5DCAA5}
+#go{
+  margin-left:auto;
+  background:transparent;
+  border:1px solid #5DCAA5;
+  color:#5DCAA5;
+  padding:8px 22px;
+  font-family:'Share Tech Mono',monospace;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  cursor:pointer;
+  border-radius:4px;
+  transition:all .15s;
+}
+#go:hover{background:#5DCAA5;color:#0b0b11}
+
+/* output row */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media (max-width:780px){.split{grid-template-columns:1fr}}
+
+#qr-frame{
+  background:#fff;
+  border-radius:4px;
+  padding:14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:340px;
+}
+#qr-svg{max-width:100%;height:auto;display:block;image-rendering:pixelated}
+#qr-canvas{display:none}
+
+.meta{margin-top:16px;font-family:'Share Tech Mono',monospace;font-size:12px;line-height:1.7;color:#9a9aa8}
+.meta .k{color:#6a6a80}
+.meta .v{color:#d3d3dc}
+.meta .ok{color:#5DCAA5}
+.meta .bad{color:#E24B4A}
+
+.exports{display:flex;gap:8px;margin-top:16px}
+.exp-btn{
+  flex:1;
+  background:transparent;
+  color:#8a8a98;
+  border:1px solid #25252e;
+  padding:8px;
+  font-family:'Share Tech Mono',monospace;
+  font-size:11px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  cursor:pointer;
+  border-radius:4px;
+  transition:all .15s;
+  text-decoration:none;
+  text-align:center;
+}
+.exp-btn:hover{color:#5DCAA5;border-color:#5DCAA5}
+
+/* heatmap */
+#heatmap-wrap{display:flex;flex-direction:column;align-items:center}
+#heatmap{display:block;image-rendering:pixelated;border:1px solid #25252e;border-radius:4px;background:#e8e8f0}
+.legend{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 14px;margin-top:14px;font-family:'Share Tech Mono',monospace;font-size:11px;color:#8a8a98;width:100%;max-width:320px}
+.legend .sw{display:inline-block;width:12px;height:12px;margin-right:8px;vertical-align:middle;border:1px solid rgba(255,255,255,0.1)}
+
+/* penalty table */
+table{width:100%;border-collapse:collapse;font-family:'Share Tech Mono',monospace;font-size:12px}
+th,td{padding:7px 10px;text-align:right}
+th{color:#6a6a80;font-weight:normal;letter-spacing:.06em;text-transform:uppercase;font-size:10px;border-bottom:1px solid #25252e}
+td{color:#9a9aa8;border-bottom:1px solid #1a1a22}
+td:nth-child(1),td:nth-child(2),th:nth-child(1),th:nth-child(2){text-align:left}
+td:nth-child(2){color:#6a6a80;font-size:11px}
+tr.winner td{color:#5DCAA5;background:rgba(93,202,165,0.06)}
+tr.winner td:nth-child(1)::before{content:"★ ";color:#5DCAA5}
+
+/* rules explainer */
+.rules{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:4px}
+@media (max-width:780px){.rules{grid-template-columns:1fr}}
+.rule{background:#0b0b11;border:1px solid #1e1e26;border-radius:4px;padding:13px 16px}
+.rule h3{font-family:'Share Tech Mono',monospace;font-size:11px;color:#EF9F27;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px}
+.rule p{font-size:13px;line-height:1.55;color:#9a9aa8}
+.rule code{font-family:'Share Tech Mono',monospace;color:#5DCAA5;font-size:12px}
+
+/* small screen tweaks */
+@media (max-width:520px){
+  body{padding:44px 12px 60px}
+  h1{font-size:22px}
+  .card{padding:18px 16px}
+  .row{gap:10px}
+  #go{margin-left:0;width:100%;margin-top:8px}
+}
+</style>
+</head>
+<body>
+<a id="back" href="../../index.html">&larr; back</a>
+<button id="share" type="button">[ deep link ]</button>
+
+<div id="wrap">
+  <header>
+    <h1>lucidqr</h1>
+    <div class="tag">generate. validate. understand.</div>
+  </header>
+
+  <div class="card">
+    <h2>Input</h2>
+    <input id="in-text" type="text" value="https://kai-denrei.github.io/qr-code-games/" spellcheck="false" autocomplete="off">
+    <div class="row">
+      <div class="field">
+        <span>ecc</span>
+        <div class="ecc-group">
+          <button class="ecc-btn" data-ecc="L">L</button>
+          <button class="ecc-btn" data-ecc="M">M</button>
+          <button class="ecc-btn" data-ecc="Q">Q</button>
+          <button class="ecc-btn on" data-ecc="H">H</button>
+        </div>
+      </div>
+      <button id="go">regenerate</button>
+    </div>
+  </div>
+
+  <div class="split">
+    <div class="card">
+      <h2>Output</h2>
+      <div id="qr-frame">
+        <svg id="qr-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <canvas id="qr-canvas"></canvas>
+      <div class="meta" id="meta"></div>
+      <div class="exports">
+        <a id="dl-svg" class="exp-btn" href="#" download="qr.svg">svg</a>
+        <a id="dl-png" class="exp-btn" href="#" download="qr.png">png</a>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Module Heatmap</h2>
+      <div id="heatmap-wrap">
+        <canvas id="heatmap" width="320" height="320"></canvas>
+        <div class="legend">
+          <div><span class="sw" style="background:#1a1a2e"></span>finder</div>
+          <div><span class="sw" style="background:#e8e8f0"></span>separator</div>
+          <div><span class="sw" style="background:#4a4a6a"></span>timing</div>
+          <div><span class="sw" style="background:#6a4a6a"></span>alignment</div>
+          <div><span class="sw" style="background:#c84b31"></span>format</div>
+          <div><span class="sw" style="background:#2d6a4f"></span>dark module</div>
+          <div><span class="sw" style="background:#2196f3"></span>data / ecc</div>
+          <div><span class="sw" style="background:transparent;border-color:#4a4a6a"></span>quiet zone</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Mask Penalty Scores</h2>
+    <table id="pen-table">
+      <thead><tr><th>Mask</th><th>Formula</th><th>Rule 1</th><th>Rule 2</th><th>Rule 3</th><th>Rule 4</th><th>Total</th></tr></thead>
+      <tbody id="pen-body"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Penalty Rules</h2>
+    <div class="rules">
+      <div class="rule">
+        <h3>Rule 1 — Long runs</h3>
+        <p><code>+3</code> for each row or column containing 5 consecutive modules of the same color, <code>+1</code> for every additional same-color module. Penalizes horizontal/vertical streaks that confuse decoders trying to lock onto module boundaries.</p>
+      </div>
+      <div class="rule">
+        <h3>Rule 2 — 2×2 blocks</h3>
+        <p><code>+3</code> for every 2×2 block of the same color. Counts overlapping blocks. Penalizes large monochrome regions that break the expected noise pattern.</p>
+      </div>
+      <div class="rule">
+        <h3>Rule 3 — False finders</h3>
+        <p><code>+40</code> for each occurrence of the pattern <code>1:1:3:1:1</code> (dark-light-dark-dark-dark-light-dark) followed or preceded by 4 light modules. This mimics the real finder pattern and can confuse the decoder's initial lock.</p>
+      </div>
+      <div class="rule">
+        <h3>Rule 4 — Dark balance</h3>
+        <p><code>+10 × floor(|%dark − 50| / 5)</code>. Penalizes codes that drift far from 50% dark modules, which keeps contrast histograms symmetric across the matrix.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="vendor/qrcode-gen.js"></script>
+<script src="vendor/jsQR.js"></script>
+<script>
+// ============================================================================
+// lucidqr — client-side educational QR generator
+// ============================================================================
+//
+// Pipeline:
+//   1. Generate QR via kazuhiko/qrcode-generator (MIT, vendored + tiny patch)
+//   2. Snapshot the matrix, independently compute penalty scores for all 8 masks
+//      using the auditable scorer below (never trust the library's internals)
+//   3. Classify every module by type for the heatmap
+//   4. Render as SVG + canvas, export as SVG/PNG
+//   5. Validate via jsQR (MIT) closed-loop decode
+// ============================================================================
+
+// ── Alignment pattern positions (QR spec, v1..v40) ─────────────────────────
+const ALIGN_POS=[
+  [],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],
+  [6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],
+  [6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],
+  [6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],
+  [6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],
+  [6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],
+  [6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],
+  [6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],
+  [6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]
+];
+
+const MASK_FORMULAS=[
+  '(r + c) mod 2 = 0',
+  'r mod 2 = 0',
+  'c mod 3 = 0',
+  '(r + c) mod 3 = 0',
+  '(⌊r/2⌋ + ⌊c/3⌋) mod 2 = 0',
+  '(rc) mod 2 + (rc) mod 3 = 0',
+  '((rc) mod 2 + (rc) mod 3) mod 2 = 0',
+  '((r+c) mod 2 + (rc) mod 3) mod 2 = 0'
+];
+
+const TYPE_COLOR={
+  finder:'#1a1a2e',
+  separator:'#e8e8f0',
+  timing:'#4a4a6a',
+  alignment:'#6a4a6a',
+  format:'#c84b31',
+  dark:'#2d6a4f',
+  data:'#2196f3'
+};
+
+// ── State ───────────────────────────────────────────────────────────────────
+let ecc='H';
+let currentQR=null;
+let currentVersion=0;
+let currentMatrix=null;
+let currentWinner=0;
+
+// ── Auditable penalty scoring ──────────────────────────────────────────────
+// Implemented from the QR spec (ISO/IEC 18004), not read from the library's
+// internals, so the numbers in the table are independently verifiable.
+
+function scoreRule1(m){
+  const n=m.length; let p=0;
+  // rows
+  for(let r=0;r<n;r++){
+    let run=1;
+    for(let c=1;c<n;c++){
+      if(m[r][c]===m[r][c-1]) run++;
+      else{ if(run>=5) p+=3+(run-5); run=1; }
+    }
+    if(run>=5) p+=3+(run-5);
+  }
+  // cols
+  for(let c=0;c<n;c++){
+    let run=1;
+    for(let r=1;r<n;r++){
+      if(m[r][c]===m[r-1][c]) run++;
+      else{ if(run>=5) p+=3+(run-5); run=1; }
+    }
+    if(run>=5) p+=3+(run-5);
+  }
+  return p;
+}
+
+function scoreRule2(m){
+  const n=m.length; let p=0;
+  for(let r=0;r<n-1;r++) for(let c=0;c<n-1;c++){
+    const v=m[r][c];
+    if(v===m[r][c+1]&&v===m[r+1][c]&&v===m[r+1][c+1]) p+=3;
+  }
+  return p;
+}
+
+function scoreRule3(m){
+  // Pattern: 1 0 1 1 1 0 1 followed or preceded by 4 light modules
+  // 11-length sequences: [1,0,1,1,1,0,1,0,0,0,0] and [0,0,0,0,1,0,1,1,1,0,1]
+  const n=m.length; let p=0;
+  const pats=[[1,0,1,1,1,0,1,0,0,0,0],[0,0,0,0,1,0,1,1,1,0,1]];
+  function match(r,c,dr,dc,pat){
+    for(let i=0;i<11;i++){
+      const rr=r+dr*i, cc=c+dc*i;
+      if(rr<0||rr>=n||cc<0||cc>=n) return false;
+      if((m[rr][cc]?1:0)!==pat[i]) return false;
+    }
+    return true;
+  }
+  // horizontal
+  for(let r=0;r<n;r++) for(let c=0;c<=n-11;c++){
+    for(const pat of pats) if(match(r,c,0,1,pat)) p+=40;
+  }
+  // vertical
+  for(let c=0;c<n;c++) for(let r=0;r<=n-11;r++){
+    for(const pat of pats) if(match(r,c,1,0,pat)) p+=40;
+  }
+  return p;
+}
+
+function scoreRule4(m){
+  const n=m.length; let dark=0;
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++) if(m[r][c]) dark++;
+  const pct=(dark/(n*n))*100;
+  return Math.floor(Math.abs(pct-50)/5)*10;
+}
+
+function scoreAll(m){
+  const r1=scoreRule1(m), r2=scoreRule2(m), r3=scoreRule3(m), r4=scoreRule4(m);
+  return {r1,r2,r3,r4,total:r1+r2+r3+r4};
+}
+
+// ── Module classifier ──────────────────────────────────────────────────────
+// Categorizes every cell of a size-N matrix based on QR structural positions.
+
+function classifyModules(n,version){
+  const c=[];
+  for(let r=0;r<n;r++){ c.push([]); for(let cc=0;cc<n;cc++) c[r].push('data'); }
+
+  // Timing patterns (will be overwritten by finders/separators/etc where they intersect)
+  for(let i=0;i<n;i++){ c[6][i]='timing'; c[i][6]='timing'; }
+
+  // Alignment patterns (skip ones that would overlap finder+separator zones)
+  const positions=ALIGN_POS[version-1]||[];
+  for(const pr of positions) for(const pc of positions){
+    if((pr<9&&pc<9)||(pr<9&&pc>n-10)||(pr>n-10&&pc<9)) continue;
+    for(let dr=-2;dr<=2;dr++) for(let dc=-2;dc<=2;dc++){
+      const rr=pr+dr, cc=pc+dc;
+      if(rr>=0&&rr<n&&cc>=0&&cc<n) c[rr][cc]='alignment';
+    }
+  }
+
+  // Finder patterns (7×7 squares in three corners)
+  const finders=[[0,0],[0,n-7],[n-7,0]];
+  for(const [br,bc] of finders){
+    for(let r=0;r<7;r++) for(let cc=0;cc<7;cc++) c[br+r][bc+cc]='finder';
+  }
+
+  // Separators (1-module border around finders)
+  for(let i=0;i<8;i++){
+    if(c[7][i]==='data'||c[7][i]==='timing') c[7][i]='separator';
+    if(c[i][7]==='data'||c[i][7]==='timing') c[i][7]='separator';
+    if(c[7][n-1-i]==='data'||c[7][n-1-i]==='timing') c[7][n-1-i]='separator';
+    if(c[i][n-8]==='data'||c[i][n-8]==='timing') c[i][n-8]='separator';
+    if(c[n-8][i]==='data'||c[n-8][i]==='timing') c[n-8][i]='separator';
+    if(c[n-1-i][7]==='data'||c[n-1-i][7]==='timing') c[n-1-i][7]='separator';
+  }
+
+  // Format info: row 8 + col 8, plus mirror copies
+  for(let i=0;i<9;i++){
+    if(i!==6){ if(c[8][i]!=='finder'&&c[8][i]!=='separator') c[8][i]='format'; }
+    if(i!==6){ if(c[i][8]!=='finder'&&c[i][8]!=='separator') c[i][8]='format'; }
+  }
+  for(let i=n-8;i<n;i++) if(c[8][i]!=='finder'&&c[8][i]!=='separator') c[8][i]='format';
+  for(let i=n-7;i<n;i++) if(c[i][8]!=='finder'&&c[i][8]!=='separator') c[i][8]='format';
+
+  // Dark module at (4V+9, 8) — always set
+  if(version>=1){
+    const dr=4*version+9;
+    if(dr<n) c[dr][8]='dark';
+  }
+
+  return c;
+}
+
+// ── Snapshot matrix from current QR ────────────────────────────────────────
+function snapshotMatrix(qr){
+  const n=qr.getModuleCount();
+  const m=[];
+  for(let r=0;r<n;r++){
+    const row=[];
+    for(let c=0;c<n;c++) row.push(qr.isDark(r,c)?1:0);
+    m.push(row);
+  }
+  return m;
+}
+
+// ── Generate + compute everything ──────────────────────────────────────────
+function generate(){
+  const text=document.getElementById('in-text').value||' ';
+  try{
+    const qr=qrcode(0,ecc); // 0 = auto version
+    qr.addData(text);
+    qr.make();
+    currentQR=qr;
+    currentMatrix=snapshotMatrix(qr);
+    const n=qr.getModuleCount();
+    currentVersion=(n-17)/4;
+    renderAll(text);
+  }catch(e){
+    document.getElementById('meta').innerHTML=
+      '<span class="bad">encode error: '+e.message+'</span>';
+  }
+}
+
+function renderAll(text){
+  renderQR();
+  renderHeatmap();
+  renderPenaltyTable();
+  renderMeta(text);
+  renderExports();
+  validateLoop(text);
+}
+
+// ── Render: SVG ────────────────────────────────────────────────────────────
+const MODULE_PX=10;
+const QUIET=4;
+
+function renderQR(){
+  const m=currentMatrix;
+  const n=m.length;
+  const total=(n+QUIET*2)*MODULE_PX;
+  const svg=document.getElementById('qr-svg');
+  svg.setAttribute('viewBox','0 0 '+total+' '+total);
+  svg.setAttribute('width',total);
+  svg.setAttribute('height',total);
+  let paths='';
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+    if(m[r][c]) paths+='M'+((c+QUIET)*MODULE_PX)+' '+((r+QUIET)*MODULE_PX)+'h'+MODULE_PX+'v'+MODULE_PX+'h-'+MODULE_PX+'z';
+  }
+  svg.innerHTML='<rect width="'+total+'" height="'+total+'" fill="#ffffff"/><path d="'+paths+'" fill="#000000"/>';
+}
+
+// ── Render: heatmap canvas ─────────────────────────────────────────────────
+function renderHeatmap(){
+  const m=currentMatrix;
+  const n=m.length;
+  const types=classifyModules(n,currentVersion);
+  const cv=document.getElementById('heatmap');
+  const ctx=cv.getContext('2d');
+  // fixed canvas size 320px; compute cell size to fit
+  const cellSize=Math.floor(320/(n+QUIET*2));
+  const total=(n+QUIET*2)*cellSize;
+  cv.width=total; cv.height=total;
+  ctx.fillStyle='#e8e8f0'; // quiet zone bg
+  ctx.fillRect(0,0,total,total);
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+    const t=types[r][c];
+    const color=TYPE_COLOR[t]||'#2196f3';
+    ctx.fillStyle=color;
+    ctx.fillRect((c+QUIET)*cellSize,(r+QUIET)*cellSize,cellSize,cellSize);
+  }
+}
+
+// ── Render: penalty table ─────────────────────────────────────────────────
+function renderPenaltyTable(){
+  const originalMask=detectCurrentMask();
+  const scores=[];
+  // For each mask 0..7 rebuild the matrix with that mask pinned, score it,
+  // then restore at the end.
+  for(let m=0;m<8;m++){
+    currentQR.makeImpl(false,m);
+    const snap=snapshotMatrix(currentQR);
+    scores.push({mask:m,...scoreAll(snap)});
+  }
+  const winner=scores.reduce((a,b)=>b.total<a.total?b:a);
+  currentWinner=winner.mask;
+  // Restore the winning matrix (same one the library would have picked)
+  currentQR.makeImpl(false,winner.mask);
+  currentMatrix=snapshotMatrix(currentQR);
+
+  const body=document.getElementById('pen-body');
+  body.innerHTML=scores.map(s=>{
+    const cls=s.mask===winner.mask?'winner':'';
+    return '<tr class="'+cls+'"><td>'+s.mask+'</td><td>'+MASK_FORMULAS[s.mask]+'</td><td>'+s.r1+'</td><td>'+s.r2+'</td><td>'+s.r3+'</td><td>'+s.r4+'</td><td>'+s.total+'</td></tr>';
+  }).join('');
+
+  // After restoring the winning mask, re-render the primary QR + heatmap so
+  // they stay in sync.
+  renderQR();
+  renderHeatmap();
+}
+
+// kazuhiko picks the winning mask internally during make(); we don't know
+// which one without re-deriving, so we just trust our re-pinned winner.
+function detectCurrentMask(){ return currentWinner; }
+
+// ── Meta text (version, ecc, mask, validation result) ─────────────────────
+function renderMeta(text){
+  const m=currentMatrix;
+  const n=m.length;
+  let dark=0;
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++) if(m[r][c]) dark++;
+  const pct=(dark/(n*n)*100).toFixed(1);
+  document.getElementById('meta').innerHTML=
+    '<div><span class="k">version</span> <span class="v">'+currentVersion+'</span> '+
+    '<span class="k">&nbsp;ecc</span> <span class="v">'+ecc+'</span> '+
+    '<span class="k">&nbsp;mask</span> <span class="v">'+currentWinner+'</span></div>'+
+    '<div><span class="k">size</span> <span class="v">'+n+'×'+n+'</span> '+
+    '<span class="k">&nbsp;dark</span> <span class="v">'+pct+'%</span></div>'+
+    '<div id="val-line"><span class="k">decode</span> <span class="v">…</span></div>';
+}
+
+// ── Closed-loop validator (jsQR on the rendered canvas) ──────────────────
+function validateLoop(expected){
+  // Render to an offscreen canvas at a decodable size
+  const m=currentMatrix; const n=m.length;
+  const px=8;
+  const total=(n+QUIET*2)*px;
+  const cv=document.getElementById('qr-canvas');
+  cv.width=total; cv.height=total;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#ffffff';
+  ctx.fillRect(0,0,total,total);
+  ctx.fillStyle='#000000';
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+    if(m[r][c]) ctx.fillRect((c+QUIET)*px,(r+QUIET)*px,px,px);
+  }
+  const img=ctx.getImageData(0,0,total,total);
+  let result='';
+  let cls='ok';
+  try{
+    const decoded=jsQR(img.data,total,total);
+    if(!decoded){ result='✗ failed'; cls='bad'; }
+    else if(decoded.data===expected){ result='✓ "'+truncate(decoded.data,38)+'"'; cls='ok'; }
+    else{ result='✗ mismatch: "'+truncate(decoded.data,38)+'"'; cls='bad'; }
+  }catch(e){ result='✗ '+e.message; cls='bad'; }
+  const line=document.getElementById('val-line');
+  if(line) line.innerHTML='<span class="k">decode</span> <span class="'+cls+'">'+result+'</span>';
+}
+
+function truncate(s,n){ return s.length>n?s.slice(0,n-1)+'…':s; }
+
+// ── Export links ─────────────────────────────────────────────────────────
+function renderExports(){
+  const svg=document.getElementById('qr-svg');
+  const svgStr='<?xml version="1.0" encoding="UTF-8"?>'+svg.outerHTML;
+  const svgBlob=new Blob([svgStr],{type:'image/svg+xml'});
+  document.getElementById('dl-svg').href=URL.createObjectURL(svgBlob);
+
+  const cv=document.getElementById('qr-canvas');
+  cv.toBlob(b=>{
+    document.getElementById('dl-png').href=URL.createObjectURL(b);
+  },'image/png');
+}
+
+// ── Wire up UI ───────────────────────────────────────────────────────────
+document.querySelectorAll('.ecc-btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('.ecc-btn').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    ecc=b.dataset.ecc;
+    generate();
+  });
+});
+document.getElementById('go').addEventListener('click',generate);
+document.getElementById('in-text').addEventListener('keydown',e=>{
+  if(e.key==='Enter') generate();
+});
+
+// Deep link button
+document.getElementById('share').addEventListener('click',async()=>{
+  const btn=document.getElementById('share');
+  try{
+    await navigator.clipboard.writeText(location.href);
+    const prev=btn.textContent;
+    btn.textContent='[ copied! ]';
+    btn.classList.add('copied');
+    setTimeout(()=>{btn.textContent=prev;btn.classList.remove('copied');},1400);
+  }catch(e){
+    btn.textContent='[ failed ]';
+    setTimeout(()=>{btn.textContent='[ deep link ]';},1400);
+  }
+});
+
+// First render
+generate();
+</script>
+</body>
+</html>
