@@ -37,6 +37,11 @@ canvas{display:block;cursor:pointer}
 .ov-v{font-size:16px;color:#9f97e8;margin-top:2px}
 #ov-btn{font-family:inherit;background:transparent;color:#888;border:1px solid #2a2a3a;padding:6px 14px;letter-spacing:.14em;text-transform:uppercase;font-size:10px;cursor:pointer;transition:color .15s,border-color .15s}
 #ov-btn:hover{color:#5DCAA5;border-color:#5DCAA5}
+#maze-input{display:flex;gap:6px;width:310px;margin-top:12px}
+#maze-text{flex:1;background:#0b0b11;border:1px solid #2a2a3a;color:#ccc;font-family:'Share Tech Mono',monospace;font-size:11px;padding:6px 10px;border-radius:4px;outline:none;transition:border-color .15s;min-width:0}
+#maze-text:focus{border-color:#5DCAA5}
+#maze-go{background:transparent;color:#5DCAA5;border:1px solid #2a2a3a;font-family:'Share Tech Mono',monospace;font-size:11px;padding:6px 12px;border-radius:4px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .15s;white-space:nowrap}
+#maze-go:hover{background:#5DCAA5;color:#0b0b11;border-color:#5DCAA5}
 </style>
 </head>
 <body>
@@ -54,6 +59,10 @@ canvas{display:block;cursor:pointer}
   <div class="stat"><div class="sl">readability</div><div class="sv" id="v-pct2">100%</div></div>
 </div>
 <div id="hint">CLICK / TAP to clear QR pixels &mdash; guide the snake to the &#127822;</div>
+<div id="maze-input">
+  <input id="maze-text" type="text" placeholder="maze text / url" spellcheck="false" autocomplete="off">
+  <button id="maze-go" type="button">regenerate</button>
+</div>
 <div id="overlay">
   <div id="ov-title">Apple Reached &mdash; Forbidden Knowledge Unlocked</div>
   <div id="ov-stats">
@@ -64,8 +73,27 @@ canvas{display:block;cursor:pointer}
   <button id="ov-btn">Play Again</button>
 </div>
 
+<script src="qr-lab/vendor/qrcode-gen.js"></script>
 <script>
-const QR=[[1,1,1,1,1,1,1,0,1,0,1,1,0,1,1,0,1,0,0,0,0,0,1,1,1,1,1,1,1],[1,0,0,0,0,0,1,0,0,1,1,1,1,1,1,1,0,1,1,1,1,0,1,0,0,0,0,0,1],[1,0,1,1,1,0,1,0,0,0,1,0,0,0,1,0,0,1,0,0,0,0,1,0,1,1,1,0,1],[1,0,1,1,1,0,1,0,1,1,1,0,1,0,0,0,1,0,1,0,1,0,1,0,1,1,1,0,1],[1,0,1,1,1,0,1,0,1,1,0,0,0,0,0,0,0,1,1,0,0,0,1,0,1,1,1,0,1],[1,0,0,0,0,0,1,0,1,1,0,1,1,0,0,0,1,0,1,1,0,0,1,0,0,0,0,0,1],[1,1,1,1,1,1,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,1,1,1,1],[0,0,0,0,0,0,0,0,1,0,1,1,1,1,0,1,0,1,1,1,1,0,0,0,0,0,0,0,0],[1,0,0,0,1,0,1,1,1,0,0,0,1,1,0,1,0,1,0,1,1,1,1,1,1,1,0,0,1],[0,1,1,1,1,1,0,0,0,0,0,1,0,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1],[1,0,1,0,0,0,1,0,1,0,0,1,0,0,0,1,0,1,1,0,0,0,1,1,1,0,0,0,1],[1,0,0,1,1,1,0,0,1,1,1,0,0,0,1,0,0,1,1,1,1,0,0,0,1,1,0,1,1],[0,0,1,0,0,0,1,0,1,0,0,1,0,1,1,1,0,1,0,0,1,1,0,0,0,0,0,1,0],[0,1,0,0,1,0,0,0,1,1,1,0,1,0,0,1,1,1,1,0,0,1,1,0,1,1,1,1,1],[1,1,0,0,1,0,1,0,1,1,0,0,0,1,1,1,0,1,0,0,1,1,1,0,1,1,1,0,1],[1,1,0,0,0,1,0,0,1,0,1,1,1,1,0,0,1,1,1,0,0,1,0,0,0,0,0,1,1],[0,0,1,1,1,0,1,0,1,1,0,0,1,1,0,0,0,1,0,0,1,1,0,1,0,0,0,1,0],[1,1,1,1,0,0,0,1,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1,1,1,1,0,1,1],[0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,1,1,1,1,0,0,1,1,0,1,0,1,0,1],[0,0,0,1,0,0,0,1,0,0,1,0,0,0,1,0,0,1,0,0,1,0,1,0,0,0,0,1,1],[1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,0,1,0,0,1,1,1,1,1,1,0,0,1],[0,0,0,0,0,0,0,0,1,0,1,1,1,0,0,1,0,1,1,1,1,0,0,0,1,0,0,0,1],[1,1,1,1,1,1,1,0,1,0,0,0,0,1,1,1,0,1,0,1,1,0,1,0,1,1,1,0,1],[1,0,0,0,0,0,1,0,0,1,1,0,0,1,0,0,1,1,1,1,1,0,0,0,1,0,0,0,0],[1,0,1,1,1,0,1,0,1,0,0,0,0,1,0,0,1,1,0,1,1,1,1,1,1,1,0,0,0],[1,0,1,1,1,0,1,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,1,0,0,0,0,1],[1,0,1,1,1,0,1,0,0,1,1,0,1,0,1,1,0,0,1,0,0,0,0,0,0,1,1,1,1],[1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,1,0,1,1,1,1,0,1,1,0,1,1],[1,1,1,1,1,1,1,0,1,0,1,1,0,1,0,0,0,1,0,0,1,0,0,1,1,0,0,1,0]];
+// QR matrix is generated at boot from the input text (or ?q= query param).
+// Pinned to QR v3 (29×29) with ECC L so the game geometry is locked; the
+// ECC level gives ~53 byte capacity, plenty for a URL or short message.
+const DEFAULT_TEXT='https://kai-denrei.github.io/qr-code-games/';
+function buildMaze(text){
+  const qr=qrcode(3,'L'); // version 3 → 29×29; ECC L for headroom
+  qr.addData(text);
+  qr.make();
+  const n=qr.getModuleCount();
+  const m=[];
+  for(let r=0;r<n;r++){
+    const row=[];
+    for(let c=0;c<n;c++) row.push(qr.isDark(r,c)?1:0);
+    m.push(row);
+  }
+  return m;
+}
+let mazeText=new URLSearchParams(location.search).get('q')||DEFAULT_TEXT;
+let QR=buildMaze(mazeText);
 
 const SIZE=29, MOD=10, QX=5, QY=5;
 const CW=SIZE*MOD+10, CH=SIZE*MOD+10;
@@ -76,7 +104,7 @@ canvas.width=CW; canvas.height=CH;
 const ctx=canvas.getContext('2d');
 
 let grid=QR.map(r=>[...r]);
-const totalBlack=QR.flat().reduce((a,v)=>a+v,0);
+let totalBlack=QR.flat().reduce((a,v)=>a+v,0);
 let cleared=0;
 
 // Snake: head at index 0. Fixed length — never grows.
@@ -296,6 +324,28 @@ function resetGame(){
   setStatus('NAVIGATING',false);
 }
 
+// Rebuild the maze from a new text and restart the game. Keeps the old
+// maze on encode failure (e.g. overflow past QR v3+L capacity).
+function regenerateMaze(newText){
+  if(!newText) newText=DEFAULT_TEXT;
+  let next;
+  try{ next=buildMaze(newText); }
+  catch(e){
+    setStatus('ENCODE FAIL: '+(e.message||e),true);
+    setTimeout(()=>setStatus('NAVIGATING',false),2400);
+    return;
+  }
+  mazeText=newText;
+  QR=next;
+  totalBlack=QR.flat().reduce((a,v)=>a+v,0);
+  try{
+    const u=new URL(location.href);
+    u.searchParams.set('q',newText);
+    history.replaceState(null,'',u.toString());
+  }catch(e){}
+  resetGame();
+}
+
 function setStatus(txt,warn,cls){
   const el=document.getElementById('status');
   el.textContent=txt;
@@ -419,6 +469,13 @@ function handleCarve(ev){
 canvas.addEventListener('mousedown',handleCarve);
 canvas.addEventListener('touchstart',e=>{e.preventDefault();handleCarve(e);},{passive:false});
 document.getElementById('ov-btn').addEventListener('click',resetGame);
+
+const mazeTextEl=document.getElementById('maze-text');
+mazeTextEl.value=mazeText;
+document.getElementById('maze-go').addEventListener('click',()=>regenerateMaze(mazeTextEl.value));
+mazeTextEl.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();regenerateMaze(mazeTextEl.value);}
+});
 
 document.getElementById('share').addEventListener('click',async()=>{
   const btn=document.getElementById('share');
