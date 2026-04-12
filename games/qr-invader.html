@@ -126,6 +126,10 @@ function scheduleNextRage(now){
 
 let bullets=[], particles=[];
 
+// Landing burst: 2 quick shots right after the intro descent, then glee + calm.
+let landingShots=0;
+let landingShotNext=0;
+
 // Intro animation — flies in from off-frame, hovers huge in center, spirals down.
 let intro=true;
 let introStart=0;
@@ -365,15 +369,34 @@ function loop(ts){
     intro=false;
     moveStart=ts;
     lastStep=ts;
-    scheduleNextRage(ts);
+    // Landing burst: invader arrives angry and fires twice before calming.
+    landingShots=2;
+    landingShotNext=ts+350;
+    anger=2.5;
   }
 
   if(!intro){
     if(!lastStep) lastStep=ts;
     if(ts-lastStep>=STEP_MS){ tick(); lastStep=ts; }
 
+    // Landing burst: fire 2 quick shots right after touchdown.
+    if(landingShots>0){
+      anger=2.5; // visually red
+      if(ts>=landingShotNext){
+        fireRandom();
+        landingShots--;
+        if(landingShots>0){
+          landingShotNext=ts+500;
+        } else {
+          anger=0;
+          gleeUntil=ts+GLEE_MS;
+          scheduleNextRage(ts);
+        }
+      }
+    }
+
     // Rage state machine — timer-driven, independent of wall hits.
-    if(rageStart===0){
+    else if(rageStart===0){
       anger=0;
       if(ts>=nextRageAt) rageStart=ts;
     } else {
@@ -473,6 +496,7 @@ function regenerateMaze(newText){
   hits=0; shots=0;
   bullets=[]; particles=[];
   anger=0; rageStart=0; gleeUntil=0; nextRageAt=0;
+  landingShots=0; landingShotNext=0;
   intro=true; introStart=0; lastStep=0;
   placeInvader();
   updateMeter();
