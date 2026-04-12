@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>QR-Code Games</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:#0d0d12;
+  color:#ccc;
+  font-family:'Share Tech Mono',ui-monospace,Menlo,monospace;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:40px 20px;
+  min-height:100vh;
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(95,77,221,.08), transparent 40%),
+    radial-gradient(circle at 80% 90%, rgba(93,202,165,.06), transparent 40%);
+}
+header{text-align:center;margin-bottom:48px}
+h1{
+  font-size:26px;
+  letter-spacing:.18em;
+  color:#eee;
+  text-transform:uppercase;
+  text-shadow:0 0 12px rgba(159,151,232,.35);
+}
+.tag{
+  font-size:12px;
+  letter-spacing:.1em;
+  color:#6a6a80;
+  margin-top:10px;
+  text-transform:uppercase;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:24px;
+  width:100%;
+  max-width:720px;
+}
+.card{
+  display:block;
+  text-decoration:none;
+  color:inherit;
+  background:#14141e;
+  border:1px solid #2a2a3a;
+  border-radius:4px;
+  padding:28px 24px;
+  position:relative;
+  transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+  image-rendering:pixelated;
+}
+.card::before{
+  content:"";
+  position:absolute;
+  inset:4px;
+  border:1px dashed #2a2a3a;
+  pointer-events:none;
+  border-radius:2px;
+}
+.card:hover{
+  transform:translate(-2px,-2px);
+  border-color:#5DCAA5;
+  box-shadow:4px 4px 0 #5DCAA5;
+}
+.card:hover .name{color:#5DCAA5}
+.num{
+  font-size:10px;
+  color:#44445a;
+  letter-spacing:.15em;
+}
+.name{
+  display:block;
+  font-size:22px;
+  color:#eee;
+  margin:10px 0 14px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  transition:color .15s ease;
+}
+.desc{
+  font-size:12px;
+  color:#888;
+  line-height:1.55;
+  margin-bottom:18px;
+  min-height:40px;
+}
+.meta{
+  display:flex;
+  justify-content:space-between;
+  font-size:10px;
+  color:#44445a;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  border-top:1px solid #1e1e2e;
+  padding-top:12px;
+}
+.meta .play{color:#9f97e8}
+footer{
+  margin-top:48px;
+  font-size:10px;
+  color:#2a2a3a;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+@media (max-width:520px){
+  h1{font-size:20px}
+  .name{font-size:18px}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>QR-Code Games</h1>
+  <div class="tag">pick a way to destroy a QR code</div>
+</header>
+
+<main class="grid">
+  <a class="card" href="games/qr-invader.html">
+    <span class="num">/ 01</span>
+    <span class="name">QR Invader</span>
+    <p class="desc">Shoot the QR. Every hit chews pixels out of the code. Stop before it stops scanning.</p>
+    <div class="meta"><span>shooter</span><span class="play">play &rarr;</span></div>
+  </a>
+
+  <a class="card" href="games/qr-snake.html">
+    <span class="num">/ 02</span>
+    <span class="name">QR Snake</span>
+    <p class="desc">A snake grows by eating the QR pixel by pixel. How long can the code survive the feast?</p>
+    <div class="meta"><span>snake</span><span class="play">play &rarr;</span></div>
+  </a>
+</main>
+
+<footer>v0.1 &middot; more iterations coming</footer>
+</body>
+</html>
