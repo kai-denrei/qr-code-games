@@ -811,7 +811,13 @@ function showScanResults(){
   try{
     const d=jsQR(img.data,total,total);
     if(!d) decodeHtml='<span class="bad">\u2717 unreadable — QR cannot be decoded</span>';
-    else decodeHtml='<span class="ok">\u2713 readable: "'+d.data.slice(0,60)+(d.data.length>60?'\u2026':'')+'"</span>';
+    else {
+      const txt=d.data.slice(0,60)+(d.data.length>60?'\u2026':'');
+      const isUrl=/^https?:\/\//i.test(d.data);
+      decodeHtml=isUrl
+        ?'<span class="ok">\u2713 readable: <a href="'+d.data+'" target="_blank" rel="noopener" style="color:#1D9E75;text-decoration:underline">"'+txt+'"</a></span>'
+        :'<span class="ok">\u2713 readable: "'+txt+'"</span>';
+    }
   }catch(e){decodeHtml='<span class="bad">\u2717 '+e.message+'</span>';}
   document.getElementById('scan-decode').innerHTML=decodeHtml;
 
