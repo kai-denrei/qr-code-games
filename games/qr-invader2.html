@@ -14,10 +14,12 @@ body{background:#fff;font-family:system-ui,sans-serif;display:flex;justify-conte
 #share:hover{color:#1D9E75;border-color:#1D9E75}
 #share.copied{color:#1D9E75;border-color:#1D9E75}
 #wrap{display:flex;flex-direction:column;align-items:center;gap:14px}
-#meter-wrap{width:420px;max-width:calc(100vw - 40px)}
-#meter-label{display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:5px}
-#meter-bg{width:100%;height:10px;background:#eee;border-radius:5px;overflow:hidden;border:0.5px solid #ddd}
-#meter-fill{height:100%;width:100%;border-radius:5px;background:#1D9E75;transition:width .12s,background .3s}
+#readability{width:420px;max-width:calc(100vw - 40px);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#read-status{font-family:'Press Start 2P',ui-monospace,monospace;font-size:10px;color:#888;line-height:1.55;flex:1;min-width:200px}
+#read-status .val{color:#1D9E75}
+#read-status .unknown{color:#BA7517}
+#read-status .fail{color:#A32D2D}
+#read-status .stale{color:#888;font-family:ui-monospace,Menlo,monospace;font-size:11px;display:block;margin-top:3px}
 #status{font-family:'Press Start 2P',ui-monospace,monospace;font-size:11px;text-align:center;min-height:16px;color:#1D9E75;letter-spacing:.04em;line-height:1.55;max-width:calc(100vw - 40px);text-shadow:1px 1px 0 rgba(0,0,0,0.08);transition:color .3s}
 #term{font-family:ui-monospace,Menlo,'SF Mono',Consolas,monospace;font-size:12px;background:#0b0b0e;color:#ccc;padding:8px 14px 10px;border-radius:4px;border:1px solid #1e1e24;width:600px;max-width:calc(100vw - 20px);text-align:left;overflow:hidden;box-shadow:inset 0 0 16px rgba(0,0,0,0.55)}
 #term-line{white-space:nowrap;overflow:hidden;text-overflow:clip}
@@ -76,9 +78,9 @@ tr.delta td{color:#A32D2D;font-size:11px}
 <a id="back" href="../index.html">&larr; back</a>
 <button id="share" type="button">[ deep link ]</button>
 <div id="wrap">
-  <div id="meter-wrap">
-    <div id="meter-label"><span>QR readability</span><span id="pct">100%</span></div>
-    <div id="meter-bg"><div id="meter-fill"></div></div>
+  <div id="readability">
+    <div id="read-status"><span class="unknown">QR READABILITY: UNKNOWN</span><span class="stale">must scan to verify</span></div>
+    <button id="scan-btn" type="button">&#9608; scan</button>
   </div>
   <div id="status">READ THE CODE BEFORE IT IS TOO LATE!</div>
   <div id="term">
@@ -92,7 +94,6 @@ tr.delta td{color:#A32D2D;font-size:11px}
     <div class="sc"><div class="sc-l">shots fired</div><div class="sc-v" id="v-shots">0</div></div>
   </div>
   <div id="hint">autonomous demo &mdash; the invader wanders the QR maze</div>
-  <button id="scan-btn" type="button">&#9608; scan</button>
   <div id="scan-modal">
     <div id="scan-card">
       <h3>Scan Complete</h3>
@@ -299,19 +300,37 @@ function spawnParticles(px,py,warm){
   });
 }
 
-function updateMeter(){
-  let destroyed=0;
+// Track destruction since last scan
+let destroyedAtLastScan=0;
+let lastScanReadable=null; // null = never scanned, true/false after
+let lastScanPct=null;
+
+function countDestroyed(){
+  let d=0;
   for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++)
-    if(QR[r][c]===1 && alive[r][c]===0) destroyed++;
-  const pct=Math.max(0, Math.round((1-destroyed/totalBlack)*100));
-  document.getElementById('pct').textContent=pct+'%';
+    if(QR[r][c]===1&&alive[r][c]===0) d++;
+  return d;
+}
+
+function updateMeter(){
+  const destroyed=countDestroyed();
   document.getElementById('v-hits').textContent=hits;
-  const fill=document.getElementById('meter-fill');
-  fill.style.width=pct+'%';
-  fill.style.background=pct>60?'#1D9E75':pct>30?'#BA7517':'#A32D2D';
-  const st=document.getElementById('status');
-  // Fixed 8-bit warning — readability drives the color, not the text.
-  st.style.color=pct>60?'#1D9E75':pct>30?'#BA7517':'#A32D2D';
+  const sinceScan=destroyed-destroyedAtLastScan;
+  const el=document.getElementById('read-status');
+
+  if(lastScanReadable===null){
+    // Never scanned
+    el.innerHTML='<span class="unknown">QR READABILITY: UNKNOWN</span>'+
+      '<span class="stale">must scan to verify</span>';
+  } else {
+    const tag=lastScanReadable
+      ?'<span class="val">READABLE ('+lastScanPct+'%)</span>'
+      :'<span class="fail">UNREADABLE</span>';
+    const stale=sinceScan>0
+      ?'<span class="stale">'+sinceScan+' module'+(sinceScan>1?'s':'')+' destroyed since last scan — status unknown</span>'
+      :'<span class="stale">up to date</span>';
+    el.innerHTML='QR READABILITY: '+tag+stale;
+  }
 }
 
 function drawQR(){
@@ -631,6 +650,7 @@ function regenerateMaze(newText){
   burstRemaining=0; burstNextAt=0;
   landingShots=0; landingShotNext=0;
   visited=Array.from({length:SIZE},()=>Array(SIZE).fill(false));
+  destroyedAtLastScan=0; lastScanReadable=null; lastScanPct=null;
   intro=true; introStart=0; lastStep=0;
   placeInvader();
   updateMeter();
@@ -813,6 +833,14 @@ function showScanResults(){
     }
     hctx.fillRect(bx,by,cellSz,cellSz);
   }
+
+  // Update the readability header with scan results
+  const destroyed=countDestroyed();
+  const pctAlive=Math.max(0,Math.round((1-destroyed/totalBlack)*100));
+  lastScanReadable=!!decodeHtml.includes('readable:');
+  lastScanPct=pctAlive;
+  destroyedAtLastScan=destroyed;
+  updateMeter();
 
   document.getElementById('scan-modal').classList.add('on');
 }
