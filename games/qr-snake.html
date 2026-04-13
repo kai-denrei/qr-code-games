@@ -92,7 +92,7 @@ canvas{display:block;cursor:pointer}
 // QR matrix is generated at boot from the input text (or ?q= query param).
 // Pinned to QR v3 (29×29) with ECC L so the game geometry is locked; the
 // ECC level gives ~53 byte capacity, plenty for a URL or short message.
-const DEFAULT_TEXT='https://kai-denrei.github.io/qr-code-games/';
+const DEFAULT_TEXT='https://www.grapplingprimitives.com';
 function buildMaze(text){
   const qr=qrcode(3,'L'); // version 3 → 29×29; ECC L for headroom
   qr.addData(text);

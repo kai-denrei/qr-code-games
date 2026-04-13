@@ -84,7 +84,7 @@ canvas{display:block;max-width:calc(100vw - 20px);height:auto}
 <script>
 // Maze is generated at boot from the input text (or ?q= query param).
 // Pinned to QR v3 (29×29) with ECC L so the canvas geometry stays locked.
-const DEFAULT_TEXT='https://kai-denrei.github.io/qr-code-games/';
+const DEFAULT_TEXT='https://www.grapplingprimitives.com';
 function buildMaze(text){
   const qr=qrcode(3,'L');
   qr.addData(text);
