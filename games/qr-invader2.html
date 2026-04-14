@@ -824,8 +824,49 @@ function computeDataPlacement(n,ver){
 const V3_CODEWORDS={L:{data:55,ecc:15},M:{data:44,ecc:26},Q:{data:34,ecc:36},H:{data:24,ecc:46}};
 
 // Per-cell metadata for hover tooltips — rebuilt each scan.
-let dmapInfo=null; // dmapInfo[r][c] = {label, desc, bits, hex, destroyed, bitsDead}
+let dmapInfo=null;
 let dmapCellPx=16, dmapQuiet=2;
+
+// ── Codeword annotation: decode what each data codeword represents ──────────
+// QR byte-mode data stream:  mode(4b) + count(8b) + payload(N×8b) + term(4b) + pad
+// The 12-bit header means payload bytes are 4 bits offset from codeword boundaries,
+// so each codeword typically bridges two adjacent characters.
+function annotateDataCW(cwIdx,text,dataCWCount){
+  const L=text.length;
+  const cwS=cwIdx*8, cwE=cwS+8;
+  // Stream regions (bit positions)
+  const mE=4;                       // mode ends
+  const cE=12;                      // count ends
+  const pE=12+L*8;                  // payload ends
+  const tE=Math.min(pE+4,dataCWCount*8); // terminator ends
+  const parts=[];
+
+  if(cwS<mE&&cwE>0)
+    parts.push('\u25B8 Mode: Byte (0100)');
+  if(cwS<cE&&cwE>mE)
+    parts.push('\u25B8 Char count: '+L);
+  if(cwS<pE&&cwE>cE){
+    const fBit=Math.max(cwS,cE), lBit=Math.min(cwE-1,pE-1);
+    const fCh=Math.floor((fBit-cE)/8), lCh=Math.floor((lBit-cE)/8);
+    const chars=[];
+    for(let i=fCh;i<=lCh&&i<L;i++){
+      const ch=text[i], code=text.charCodeAt(i);
+      const printable=code>=32&&code<=126;
+      const display=printable?'\u201C'+ch+'\u201D':'U+'+code.toString(16).toUpperCase().padStart(4,'0');
+      chars.push(display+' (0x'+code.toString(16).toUpperCase().padStart(2,'0')+')');
+    }
+    if(chars.length) parts.push('\u25B8 Payload: '+chars.join(', '));
+  }
+  if(cwS<tE&&cwE>pE)
+    parts.push('\u25B8 Terminator (0000)');
+  if(cwS>=tE){
+    const padStart=Math.ceil(tE/8);
+    const padIdx=cwIdx-padStart;
+    if(padIdx>=0) parts.push('\u25B8 Padding byte '+(padIdx%2===0?'0xEC':'0x11'));
+  }
+  if(!parts.length) parts.push('\u25B8 Data region');
+  return parts.join('\n');
+}
 
 const STRUCT_DESC={
   finder:'Position Detection Pattern — one of three 7\u00d77 squares that help scanners locate and orient the QR code.',
@@ -856,15 +897,15 @@ function renderDataMap(){
       if(QR[r]?.[c]===1&&alive[r]?.[c]===0) dead++;
     }
     const isData=cw<split.data;
+    const label=isData?'D'+(cw+1):'E'+(cw-split.data+1);
+    const annotation=isData
+      ?annotateDataCW(cw,mazeText,split.data)
+      :'\u25B8 Reed-Solomon error correction byte '+(cw-split.data+1)+' of '+split.ecc+'.\nComputed from the '+split.data+' data codewords. Allows recovery of up to '+Math.floor(split.ecc/2)+' damaged codewords.';
     cwGroups.push({
-      idx:cw,
-      isData,
-      label:isData?'D'+(cw+1):'E'+(cw-split.data+1),
-      cells,
-      byte,
+      idx:cw,isData,label,cells,byte,
       hex:'0x'+byte.toString(16).toUpperCase().padStart(2,'0'),
       bin:byte.toString(2).padStart(8,'0'),
-      dead
+      dead,annotation
     });
   }
 
@@ -878,12 +919,12 @@ function renderDataMap(){
       cellLabel[r][c]=cw.label;
       cellType[r][c]=(cw.isData?'d':'e')+(cw.idx%2);
       const destroyed=QR[r][c]===1&&alive[r][c]===0;
-      const role=cw.isData
-        ?'Data Codeword '+cw.label+' \u2014 byte '+((cw.idx)+1)+' of '+split.data+' data bytes.\nContains encoded payload (text, URL, etc.) after mode/count headers and RS interleaving.'
-        :'Error Correction '+cw.label+' \u2014 byte '+(cw.idx-split.data+1)+' of '+split.ecc+' Reed-Solomon bytes.\nEnables recovery of up to '+(Math.floor(split.ecc/2))+' damaged codewords.';
+      const header=cw.isData
+        ?'Data Codeword '+cw.label+' \u2014 byte '+(cw.idx+1)+' of '+split.data
+        :'ECC '+cw.label+' \u2014 byte '+(cw.idx-split.data+1)+' of '+split.ecc;
       dmapInfo[r][c]={
         label:cw.label,
-        desc:role,
+        desc:header+'\n'+cw.annotation,
         bits:'Bits: '+cw.bin+' ('+cw.hex+')',
         destroyed,
         deadNote:cw.dead>0?cw.dead+' of 8 bits destroyed in this codeword':null
