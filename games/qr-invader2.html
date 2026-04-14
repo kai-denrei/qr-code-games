@@ -82,8 +82,15 @@ tr.delta td{color:#A32D2D;font-size:11px}
 #scan-table th .tip{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#222;color:#eee;font-family:system-ui,sans-serif;font-size:11px;font-weight:normal;letter-spacing:0;text-transform:none;padding:8px 12px;border-radius:4px;width:220px;text-align:left;line-height:1.45;z-index:30;box-shadow:0 4px 14px rgba(0,0,0,0.3);pointer-events:none;white-space:normal}
 #scan-table th:hover .tip{display:block}
 /* old heatmap removed — data placement map replaces it */
-#datamap{image-rendering:pixelated;border:1px solid #ddd;border-radius:4px;display:block}
-#datamap-wrap{-webkit-overflow-scrolling:touch}
+#datamap{image-rendering:pixelated;border:1px solid #ddd;border-radius:4px;display:block;cursor:crosshair}
+#datamap-wrap{-webkit-overflow-scrolling:touch;position:relative}
+#datamap-tip{position:fixed;background:#1a1a22;color:#ddd;font-family:ui-monospace,Menlo,monospace;font-size:11px;padding:10px 14px;border-radius:5px;max-width:300px;line-height:1.55;z-index:35;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,0.45);display:none;word-break:break-word}
+#datamap-tip.on{display:block}
+#datamap-tip .lbl{color:#5DCAA5;font-weight:bold;font-size:12px;margin-bottom:4px;display:block}
+#datamap-tip .desc{color:#aaa;font-size:10px;line-height:1.5;margin-bottom:5px}
+#datamap-tip .bits{color:#90caf9;font-size:10px;font-family:ui-monospace,monospace}
+#datamap-tip .ecc-bits{color:#ffcc80}
+#datamap-tip .destroyed-tag{color:#E24B4A;font-weight:bold;font-size:10px;display:block;margin-top:4px}
 #scan-close{background:transparent;color:#888;border:1px solid #ddd;font-family:ui-monospace,Menlo,monospace;font-size:11px;padding:8px 22px;border-radius:4px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;transition:all .15s;display:block;margin:0 auto}
 #scan-close:hover{color:#1D9E75;border-color:#1D9E75}
 /* these old rules are replaced by #controls in the new layout */
@@ -124,6 +131,7 @@ tr.delta td{color:#A32D2D;font-size:11px}
       <p style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5">Every module in the data region belongs to a numbered codeword. <b style="color:#2196f3">D1–D55</b> = data codewords, <b style="color:#ff9800">E1–E15</b> = error correction. Placed in a right-to-left zigzag per the QR spec.</p>
       <div id="datamap-wrap" style="overflow-x:auto;margin-bottom:18px">
         <canvas id="datamap"></canvas>
+        <div id="datamap-tip"></div>
       </div>
       <button id="scan-close" type="button">close</button>
     </div>
@@ -815,32 +823,92 @@ function computeDataPlacement(n,ver){
 // Data/ECC codeword split for v3 by ECC level (spec table)
 const V3_CODEWORDS={L:{data:55,ecc:15},M:{data:44,ecc:26},Q:{data:34,ecc:36},H:{data:24,ecc:46}};
 
+// Per-cell metadata for hover tooltips — rebuilt each scan.
+let dmapInfo=null; // dmapInfo[r][c] = {label, desc, bits, hex, destroyed, bitsDead}
+let dmapCellPx=16, dmapQuiet=2;
+
+const STRUCT_DESC={
+  finder:'Position Detection Pattern — one of three 7\u00d77 squares that help scanners locate and orient the QR code.',
+  separator:'Separator — 1-module white border around finder patterns, prevents interference with adjacent data.',
+  timing:'Timing Pattern — alternating dark/light strip on row 6 and column 6. Scanners use it to determine module spacing.',
+  alignment:'Alignment Pattern — 5\u00d75 square that helps compensate for image distortion and perspective (v2+).',
+  format:'Format Information — 15-bit sequence encoding the error correction level and mask pattern. Stored in two copies for redundancy.',
+  dark:'Dark Module — always-dark module at a fixed position, part of the QR specification structure.'
+};
+
 function renderDataMap(){
   const n=SIZE;
   const ver=(n-17)/4;
   const pos=computeDataPlacement(n,ver);
   const types=classifyModules(n,ver);
-  const split=V3_CODEWORDS['L']||{data:55,ecc:15}; // we pin to L
+  const split=V3_CODEWORDS['L']||{data:55,ecc:15};
   const totalCW=split.data+split.ecc;
 
-  // Build cell → codeword label map
+  // Build codeword groups: each has 8 cell positions + byte value
+  const cwGroups=[];
+  for(let cw=0;cw<totalCW;cw++){
+    const cells=pos.slice(cw*8,cw*8+8);
+    let byte=0, dead=0;
+    for(let b=0;b<8;b++){
+      const {r,c}=cells[b]||{r:0,c:0};
+      const bit=QR[r]?.[c]?1:0;
+      byte=(byte<<1)|bit;
+      if(QR[r]?.[c]===1&&alive[r]?.[c]===0) dead++;
+    }
+    const isData=cw<split.data;
+    cwGroups.push({
+      idx:cw,
+      isData,
+      label:isData?'D'+(cw+1):'E'+(cw-split.data+1),
+      cells,
+      byte,
+      hex:'0x'+byte.toString(16).toUpperCase().padStart(2,'0'),
+      bin:byte.toString(2).padStart(8,'0'),
+      dead
+    });
+  }
+
+  // Map cells → their codeword + build info grid
   const cellLabel=Array.from({length:n},()=>Array(n).fill(''));
   const cellType=Array.from({length:n},()=>Array(n).fill(''));
-  for(let i=0;i<pos.length;i++){
-    const cwIdx=Math.floor(i/8);
-    const {r,c}=pos[i];
-    if(cwIdx<split.data){
-      cellLabel[r][c]='D'+(cwIdx+1);
-      cellType[r][c]='d'+(cwIdx%2); // alternating shade
-    } else if(cwIdx<totalCW){
-      cellLabel[r][c]='E'+(cwIdx-split.data+1);
-      cellType[r][c]='e'+(cwIdx%2);
+  dmapInfo=Array.from({length:n},()=>Array(n).fill(null));
+
+  for(const cw of cwGroups){
+    for(const {r,c} of cw.cells){
+      cellLabel[r][c]=cw.label;
+      cellType[r][c]=(cw.isData?'d':'e')+(cw.idx%2);
+      const destroyed=QR[r][c]===1&&alive[r][c]===0;
+      const role=cw.isData
+        ?'Data Codeword '+cw.label+' \u2014 byte '+((cw.idx)+1)+' of '+split.data+' data bytes.\nContains encoded payload (text, URL, etc.) after mode/count headers and RS interleaving.'
+        :'Error Correction '+cw.label+' \u2014 byte '+(cw.idx-split.data+1)+' of '+split.ecc+' Reed-Solomon bytes.\nEnables recovery of up to '+(Math.floor(split.ecc/2))+' damaged codewords.';
+      dmapInfo[r][c]={
+        label:cw.label,
+        desc:role,
+        bits:'Bits: '+cw.bin+' ('+cw.hex+')',
+        destroyed,
+        deadNote:cw.dead>0?cw.dead+' of 8 bits destroyed in this codeword':null
+      };
+    }
+  }
+  // Structural cell info
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+    const t=types[r][c];
+    if(t!=='data'&&!dmapInfo[r][c]){
+      const destroyed=QR[r][c]===1&&alive[r][c]===0;
+      const short={finder:'FP',timing:'T',alignment:'AP',format:'FI',dark:'DM',separator:'SEP'};
+      dmapInfo[r][c]={
+        label:short[t]||t,
+        desc:STRUCT_DESC[t]||t,
+        bits:null,
+        destroyed,
+        deadNote:null
+      };
     }
   }
 
-  // Render to the datamap canvas
-  const cellPx=16;
-  const quiet=2;
+  // Render canvas
+  const cellPx=dmapCellPx;
+  const quiet=dmapQuiet;
   const total=(n+quiet*2)*cellPx;
   const cv=document.getElementById('datamap');
   cv.width=total; cv.height=total;
@@ -858,40 +926,77 @@ function renderDataMap(){
     const bx=(c+quiet)*cellPx, by=(r+quiet)*cellPx;
     const t=types[r][c];
     const destroyed=QR[r][c]===1&&alive[r][c]===0;
-
-    // Background
     if(t!=='data'){
       ctx.fillStyle=destroyed?'rgba(226,75,74,0.35)':(structColors[t]||'#f0f0f0');
       ctx.fillRect(bx,by,cellPx,cellPx);
-      // Label structural types
       ctx.fillStyle=t==='separator'||t==='format'?'#333':'#fff';
       const labels={finder:'FP',timing:'T',alignment:'AP',format:'FI',dark:'DM',separator:''};
-      if(labels[t]) {ctx.fillText(labels[t],bx+cellPx/2,by+cellPx/2);}
+      if(labels[t]) ctx.fillText(labels[t],bx+cellPx/2,by+cellPx/2);
     } else {
-      // Data/ECC cell
       const ct=cellType[r][c];
-      if(destroyed){
-        ctx.fillStyle='rgba(226,75,74,0.3)';
-      } else if(ct){
-        ctx.fillStyle=dataColors[ct]||'#e3f2fd';
-      } else {
-        ctx.fillStyle=QR[r][c]?'#e0e0e0':'#f9f9f9';
-      }
+      if(destroyed) ctx.fillStyle='rgba(226,75,74,0.3)';
+      else if(ct) ctx.fillStyle=dataColors[ct]||'#e3f2fd';
+      else ctx.fillStyle=QR[r][c]?'#e0e0e0':'#f9f9f9';
       ctx.fillRect(bx,by,cellPx,cellPx);
-      // Label with codeword ID
       const lbl=cellLabel[r][c];
       if(lbl){
         ctx.fillStyle=destroyed?'rgba(160,40,40,0.5)':(ct&&ct[0]==='e'?'#e65100':'#1565c0');
         ctx.fillText(lbl,bx+cellPx/2,by+cellPx/2);
       }
     }
-
-    // Grid line
     ctx.strokeStyle='rgba(0,0,0,0.08)';
     ctx.lineWidth=0.5;
     ctx.strokeRect(bx,by,cellPx,cellPx);
   }
 }
+
+// ── Datamap hover tooltip ───────────────────────────────────────────────────
+function initDatamapHover(){
+  const cv=document.getElementById('datamap');
+  const tip=document.getElementById('datamap-tip');
+  let lastCell='';
+
+  function cellFromEvent(e){
+    const rect=cv.getBoundingClientRect();
+    const sx=e.clientX-rect.left, sy=e.clientY-rect.top;
+    const scale=cv.width/rect.width;
+    const px=sx*scale, py=sy*scale;
+    const c=Math.floor(px/dmapCellPx)-dmapQuiet;
+    const r=Math.floor(py/dmapCellPx)-dmapQuiet;
+    return {r,c};
+  }
+
+  function show(e){
+    if(!dmapInfo) return;
+    const {r,c}=cellFromEvent(e);
+    const key=r+','+c;
+    if(key===lastCell) return;
+    lastCell=key;
+    if(r<0||r>=SIZE||c<0||c>=SIZE||!dmapInfo[r][c]){
+      tip.classList.remove('on'); return;
+    }
+    const info=dmapInfo[r][c];
+    let html='<span class="lbl">['+info.label+'] ('+r+','+c+')</span>';
+    html+='<span class="desc">'+info.desc.replace(/\n/g,'<br>')+'</span>';
+    if(info.bits) html+='<br><span class="'+(info.label[0]==='E'?'ecc-bits':'bits')+'">'+info.bits+'</span>';
+    if(info.destroyed) html+='<span class="destroyed-tag">\u26A0 MODULE DESTROYED</span>';
+    if(info.deadNote) html+='<span class="destroyed-tag">'+info.deadNote+'</span>';
+    tip.innerHTML=html;
+    tip.classList.add('on');
+    // Position near cursor
+    const tx=Math.min(e.clientX+14,window.innerWidth-320);
+    const ty=Math.max(e.clientY-80,8);
+    tip.style.left=tx+'px';
+    tip.style.top=ty+'px';
+  }
+
+  function hide(){tip.classList.remove('on');lastCell='';}
+
+  cv.addEventListener('mousemove',show);
+  cv.addEventListener('mouseleave',hide);
+  cv.addEventListener('click',show); // mobile tap
+}
+initDatamapHover();
 
 function showScanResults(){
   if(!originalScore) cacheOriginalScore();
