@@ -82,6 +82,13 @@ tr.delta td{color:#A32D2D;font-size:11px}
 #scan-table th .tip{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#222;color:#eee;font-family:system-ui,sans-serif;font-size:11px;font-weight:normal;letter-spacing:0;text-transform:none;padding:8px 12px;border-radius:4px;width:220px;text-align:left;line-height:1.45;z-index:30;box-shadow:0 4px 14px rgba(0,0,0,0.3);pointer-events:none;white-space:normal}
 #scan-table th:hover .tip{display:block}
 /* old heatmap removed — data placement map replaces it */
+#charmap-container{position:relative}
+#charmap{display:flex;flex-wrap:wrap;gap:2px;margin-bottom:10px;justify-content:center}
+.char-box{display:inline-flex;align-items:center;justify-content:center;width:18px;height:22px;border:1px solid #d0d0d8;border-radius:2px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#444;cursor:pointer;transition:all .12s;user-select:none;background:#fafafa}
+.char-box:hover{border-color:#2196f3;background:#e3f2fd}
+.char-box.on{background:#1565c0;color:#fff;border-color:#0d47a1}
+.char-box.head{background:#EF9F27;color:#fff;border-color:#e65100;cursor:default;font-size:9px}
+#connect-lines{position:absolute;top:0;left:0;pointer-events:none;z-index:5}
 #datamap{image-rendering:pixelated;border:1px solid #ddd;border-radius:4px;display:block;cursor:crosshair}
 #datamap-wrap{-webkit-overflow-scrolling:touch;position:relative}
 #datamap-tip{position:fixed;background:#1a1a22;color:#ddd;font-family:ui-monospace,Menlo,monospace;font-size:11px;padding:10px 14px;border-radius:5px;max-width:300px;line-height:1.55;z-index:35;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,0.45);display:none;word-break:break-word}
@@ -128,9 +135,13 @@ tr.delta td{color:#A32D2D;font-size:11px}
       <div id="scan-decode"></div>
       <table id="scan-table"><thead><tr><th></th><th>Rule 1<span class="tip">+3 for each row/column with 5+ consecutive same-color modules, +1 per extra. Penalizes long horizontal/vertical streaks.</span></th><th>Rule 2<span class="tip">+3 for every 2×2 block of the same color. Counts overlapping blocks. Penalizes large monochrome patches.</span></th><th>Rule 3<span class="tip">+40 for each finder-like pattern (1:1:3:1:1) followed or preceded by 4 light modules. Prevents false detection locks.</span></th><th>Rule 4<span class="tip">+10 × floor(|%dark − 50| / 5). Penalizes imbalanced dark/light ratios across the matrix.</span></th><th>Total</th></tr></thead><tbody id="scan-tbody"></tbody></table>
       <h3 style="margin-top:18px">Data Placement Map</h3>
-      <p style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5">Every module in the data region belongs to a numbered codeword. <b style="color:#2196f3">D1–D55</b> = data codewords, <b style="color:#ff9800">E1–E15</b> = error correction. Placed in a right-to-left zigzag per the QR spec.</p>
-      <div id="datamap-wrap" style="overflow-x:auto;margin-bottom:18px">
-        <canvas id="datamap"></canvas>
+      <p style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5">Click any letter to see which modules carry its bits. <b style="color:#2196f3">D1–D55</b> = data, <b style="color:#ff9800">E1–E15</b> = ECC. Bits are 4 off from byte boundaries due to the 12-bit header.</p>
+      <div id="charmap-container">
+        <div id="charmap"></div>
+        <div id="datamap-wrap" style="overflow-x:auto;margin-bottom:18px">
+          <canvas id="datamap"></canvas>
+        </div>
+        <canvas id="connect-lines"></canvas>
         <div id="datamap-tip"></div>
       </div>
       <button id="scan-close" type="button">close</button>
@@ -909,6 +920,11 @@ function renderDataMap(){
     });
   }
 
+  // Build character → cell mapping for the interactive charmap
+  lastPos=pos;
+  buildCharMap(mazeText,pos);
+  renderCharBoxes(mazeText);
+
   // Map cells → their codeword + build info grid
   const cellLabel=Array.from({length:n},()=>Array(n).fill(''));
   const cellType=Array.from({length:n},()=>Array(n).fill(''));
@@ -1038,6 +1054,125 @@ function initDatamapHover(){
   cv.addEventListener('click',show); // mobile tap
 }
 initDatamapHover();
+
+// ── Character ↔ cell mapping: click a letter, see its bits in the QR ────────
+let charCellMap=[];   // charCellMap[i] = [{r,c},...] — 8 cells for char i
+let activeChars=new Set();
+let lastPos=null;     // stash pos array from last render
+
+function buildCharMap(text,pos){
+  charCellMap=[];
+  for(let i=0;i<text.length;i++){
+    const bitStart=12+i*8; // 12-bit header: mode(4)+count(8)
+    const cells=[];
+    for(let b=0;b<8;b++){
+      const idx=bitStart+b;
+      if(idx<pos.length) cells.push(pos[idx]);
+    }
+    charCellMap.push(cells);
+  }
+}
+
+function renderCharBoxes(text){
+  const wrap=document.getElementById('charmap');
+  wrap.innerHTML='';
+  activeChars.clear();
+  // Header indicator boxes
+  const hdr=document.createElement('span');
+  hdr.className='char-box head';
+  hdr.textContent='HDR';
+  hdr.title='Mode indicator (4b) + character count (8b) = 12-bit header';
+  wrap.appendChild(hdr);
+  // Character boxes
+  for(let i=0;i<text.length;i++){
+    const box=document.createElement('span');
+    box.className='char-box';
+    box.textContent=text[i];
+    box.title='Character '+(i+1)+': "'+text[i]+'" (0x'+text.charCodeAt(i).toString(16).toUpperCase()+')';
+    box.dataset.idx=i;
+    box.addEventListener('click',()=>toggleChar(i,box));
+    wrap.appendChild(box);
+  }
+}
+
+function toggleChar(idx,box){
+  if(activeChars.has(idx)){
+    activeChars.delete(idx);
+    box.classList.remove('on');
+  } else {
+    activeChars.add(idx);
+    box.classList.add('on');
+  }
+  drawConnections();
+}
+
+function drawConnections(){
+  const container=document.getElementById('charmap-container');
+  const cv=document.getElementById('connect-lines');
+  const dataCV=document.getElementById('datamap');
+  if(!container||!cv||!dataCV) return;
+
+  // Size overlay to cover the full container
+  const cRect=container.getBoundingClientRect();
+  cv.width=cRect.width;
+  cv.height=cRect.height;
+  cv.style.width=cRect.width+'px';
+  cv.style.height=cRect.height+'px';
+  const ctx=cv.getContext('2d');
+  ctx.clearRect(0,0,cv.width,cv.height);
+
+  if(activeChars.size===0) return;
+
+  // Canvas display mapping: datamap canvas coords → container-relative display coords
+  const dRect=dataCV.getBoundingClientRect();
+  const scaleX=dRect.width/dataCV.width;
+  const scaleY=dRect.height/dataCV.height;
+  const dOffX=dRect.left-cRect.left;
+  const dOffY=dRect.top-cRect.top;
+
+  // Color palette for multiple selections
+  const colors=['#1565c0','#c62828','#2e7d32','#6a1b9a','#e65100','#00838f','#ad1457','#33691e'];
+
+  let ci=0;
+  for(const idx of activeChars){
+    const cells=charCellMap[idx];
+    if(!cells||!cells.length) continue;
+    const color=colors[ci%colors.length];
+    ci++;
+
+    // Find the char-box element
+    const box=document.querySelector('.char-box[data-idx="'+idx+'"]');
+    if(!box) continue;
+    const bRect=box.getBoundingClientRect();
+    const bx=bRect.left-cRect.left+bRect.width/2;
+    const by=bRect.top-cRect.top+bRect.height;
+
+    // Highlight cells + draw lines
+    ctx.strokeStyle=color;
+    ctx.lineWidth=1.5;
+    ctx.setLineDash([4,3]);
+    ctx.globalAlpha=0.7;
+
+    for(const {r,c} of cells){
+      // Cell center in display coords
+      const cx=dOffX+(c+dmapQuiet)*dmapCellPx*scaleX+dmapCellPx*scaleX/2;
+      const cy=dOffY+(r+dmapQuiet)*dmapCellPx*scaleY+dmapCellPx*scaleY/2;
+      // Dashed line
+      ctx.beginPath();
+      ctx.moveTo(bx,by);
+      ctx.lineTo(cx,cy);
+      ctx.stroke();
+      // Highlight circle at cell
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(cx,cy,dmapCellPx*scaleX*0.6,0,Math.PI*2);
+      ctx.stroke();
+      ctx.setLineDash([4,3]);
+    }
+    ctx.globalAlpha=1;
+  }
+  ctx.setLineDash([]);
+}
 
 function showScanResults(){
   if(!originalScore) cacheOriginalScore();
