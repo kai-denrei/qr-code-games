@@ -82,6 +82,8 @@ tr.delta td{color:#A32D2D;font-size:11px}
 #scan-heatmap{image-rendering:pixelated;border:1px solid #ddd;border-radius:4px}
 .scan-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11px;color:#888;font-family:ui-monospace,monospace}
 .scan-legend .sw{display:inline-block;width:10px;height:10px;margin-right:5px;vertical-align:middle;border:1px solid rgba(0,0,0,0.1)}
+#datamap{image-rendering:pixelated;border:1px solid #ddd;border-radius:4px;display:block}
+#datamap-wrap{-webkit-overflow-scrolling:touch}
 #scan-close{background:transparent;color:#888;border:1px solid #ddd;font-family:ui-monospace,Menlo,monospace;font-size:11px;padding:8px 22px;border-radius:4px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;transition:all .15s;display:block;margin:0 auto}
 #scan-close:hover{color:#1D9E75;border-color:#1D9E75}
 /* these old rules are replaced by #controls in the new layout */
@@ -129,6 +131,11 @@ tr.delta td{color:#A32D2D;font-size:11px}
           <span><span class="sw" style="background:#eee;border-color:#ccc"></span>white</span>
         </div>
       </div>
+      <h3 style="margin-top:18px">Data Placement Map</h3>
+      <p style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5">Every module in the data region belongs to a numbered codeword. <b style="color:#2196f3">D1–D55</b> = data codewords, <b style="color:#ff9800">E1–E15</b> = error correction. Placed in a right-to-left zigzag per the QR spec.</p>
+      <div id="datamap-wrap" style="overflow-x:auto;margin-bottom:18px">
+        <canvas id="datamap"></canvas>
+      </div>
       <button id="scan-close" type="button">close</button>
     </div>
   </div>
@@ -168,7 +175,7 @@ let mazeText=new URLSearchParams(location.search).get('q')||DEFAULT_TEXT;
 let QR=buildMaze(mazeText);
 
 const SIZE=29, MOD=20;                // QR cell is 2x larger than before
-const QX=10, QY=90;                   // headroom above the QR for the intro descent
+const QX=10, QY=30;                   // minimal headroom — just enough for the intro to land
 const CW=SIZE*MOD+20, CH=SIZE*MOD+QY+10;
 const DIRS=[[0,1],[1,0],[0,-1],[-1,0]]; // R D L U
 
@@ -792,6 +799,111 @@ function drawScanLine(ts){
   }
 }
 
+// ── Data placement: QR spec zigzag codeword map ─────────────────────────────
+// Walks the matrix in the spec-defined right-to-left 2-column zigzag, skipping
+// structural modules, and returns an ordered list of {r,c} positions. Every 8
+// consecutive positions form one codeword. For v3-L: D1..D55 then E1..E15.
+function computeDataPlacement(n,ver){
+  const types=classifyModules(n,ver);
+  const pos=[];
+  let upward=true;
+  for(let right=n-1;right>=1;right-=2){
+    if(right===6) right=5; // skip timing column
+    const rows=[];
+    for(let i=0;i<n;i++) rows.push(upward?n-1-i:i);
+    for(const row of rows){
+      for(const col of [right,right-1]){
+        if(col<0||col>=n) continue;
+        if(types[row][col]!=='data') continue;
+        pos.push({r:row,c:col});
+      }
+    }
+    upward=!upward;
+  }
+  return pos;
+}
+
+// Data/ECC codeword split for v3 by ECC level (spec table)
+const V3_CODEWORDS={L:{data:55,ecc:15},M:{data:44,ecc:26},Q:{data:34,ecc:36},H:{data:24,ecc:46}};
+
+function renderDataMap(){
+  const n=SIZE;
+  const ver=(n-17)/4;
+  const pos=computeDataPlacement(n,ver);
+  const types=classifyModules(n,ver);
+  const split=V3_CODEWORDS['L']||{data:55,ecc:15}; // we pin to L
+  const totalCW=split.data+split.ecc;
+
+  // Build cell → codeword label map
+  const cellLabel=Array.from({length:n},()=>Array(n).fill(''));
+  const cellType=Array.from({length:n},()=>Array(n).fill(''));
+  for(let i=0;i<pos.length;i++){
+    const cwIdx=Math.floor(i/8);
+    const {r,c}=pos[i];
+    if(cwIdx<split.data){
+      cellLabel[r][c]='D'+(cwIdx+1);
+      cellType[r][c]='d'+(cwIdx%2); // alternating shade
+    } else if(cwIdx<totalCW){
+      cellLabel[r][c]='E'+(cwIdx-split.data+1);
+      cellType[r][c]='e'+(cwIdx%2);
+    }
+  }
+
+  // Render to the datamap canvas
+  const cellPx=16;
+  const quiet=2;
+  const total=(n+quiet*2)*cellPx;
+  const cv=document.getElementById('datamap');
+  cv.width=total; cv.height=total;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#f9f9f9'; ctx.fillRect(0,0,total,total);
+
+  const structColors={finder:'#1a1a2e',separator:'#d8d8e0',timing:'#4a4a6a',alignment:'#6a4a6a',format:'#c84b31',dark:'#2d6a4f'};
+  const dataColors={d0:'#bbdefb',d1:'#90caf9',e0:'#ffe0b2',e1:'#ffcc80'};
+
+  ctx.font='bold 6px ui-monospace,Menlo,monospace';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+    const bx=(c+quiet)*cellPx, by=(r+quiet)*cellPx;
+    const t=types[r][c];
+    const destroyed=QR[r][c]===1&&alive[r][c]===0;
+
+    // Background
+    if(t!=='data'){
+      ctx.fillStyle=destroyed?'rgba(226,75,74,0.35)':(structColors[t]||'#f0f0f0');
+      ctx.fillRect(bx,by,cellPx,cellPx);
+      // Label structural types
+      ctx.fillStyle=t==='separator'||t==='format'?'#333':'#fff';
+      const labels={finder:'FP',timing:'T',alignment:'AP',format:'FI',dark:'DM',separator:''};
+      if(labels[t]) {ctx.fillText(labels[t],bx+cellPx/2,by+cellPx/2);}
+    } else {
+      // Data/ECC cell
+      const ct=cellType[r][c];
+      if(destroyed){
+        ctx.fillStyle='rgba(226,75,74,0.3)';
+      } else if(ct){
+        ctx.fillStyle=dataColors[ct]||'#e3f2fd';
+      } else {
+        ctx.fillStyle=QR[r][c]?'#e0e0e0':'#f9f9f9';
+      }
+      ctx.fillRect(bx,by,cellPx,cellPx);
+      // Label with codeword ID
+      const lbl=cellLabel[r][c];
+      if(lbl){
+        ctx.fillStyle=destroyed?'rgba(160,40,40,0.5)':(ct&&ct[0]==='e'?'#e65100':'#1565c0');
+        ctx.fillText(lbl,bx+cellPx/2,by+cellPx/2);
+      }
+    }
+
+    // Grid line
+    ctx.strokeStyle='rgba(0,0,0,0.08)';
+    ctx.lineWidth=0.5;
+    ctx.strokeRect(bx,by,cellPx,cellPx);
+  }
+}
+
 function showScanResults(){
   if(!originalScore) cacheOriginalScore();
   const currentMatrix=alive.map(r=>[...r]);
@@ -852,6 +964,9 @@ function showScanResults(){
     }
     hctx.fillRect(bx,by,cellSz,cellSz);
   }
+
+  // Render the data placement map
+  renderDataMap();
 
   // Update the readability header with scan results
   const destroyed=countDestroyed();
