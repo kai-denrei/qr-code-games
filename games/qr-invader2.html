@@ -21,9 +21,6 @@ body{background:#fff;font-family:system-ui,sans-serif;display:flex;justify-conte
 #read-status .stale{color:#888;font-family:ui-monospace,Menlo,monospace;font-size:9px;display:block;margin-top:1px}
 #scan-btn{background:transparent;color:#1D9E75;border:1px solid #1D9E75;font-family:'Press Start 2P',ui-monospace,monospace;font-size:8px;padding:4px 10px;border-radius:3px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .15s;white-space:nowrap}
 #scan-btn:hover{background:#1D9E75;color:#fff}
-#mvp-btn{background:transparent;color:#BA7517;border:1px solid #BA7517;font-family:'Press Start 2P',ui-monospace,monospace;font-size:8px;padding:4px 10px;border-radius:3px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .15s;white-space:nowrap}
-#mvp-btn:hover{background:#BA7517;color:#fff}
-#mvp-btn.on{background:#E24B4A;color:#fff;border-color:#E24B4A}
 #share{font-family:inherit;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#888;padding:4px 8px;border:1px solid #ddd;border-radius:3px;background:#fff;cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap}
 #share:hover,#share.copied{color:#1D9E75;border-color:#1D9E75}
 
@@ -72,22 +69,25 @@ canvas{display:block;max-width:100%;height:auto}
 #hint{font-size:9px;color:#bbb;text-align:center}
 #scan-modal{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:none;align-items:center;justify-content:center;z-index:20;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 #scan-modal.on{display:flex}
-#scan-card{background:#fff;border-radius:8px;padding:28px 32px;max-width:620px;width:calc(100vw - 40px);max-height:calc(100vh - 40px);overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,0.4);font-family:system-ui,sans-serif;color:#222}
-#scan-card h3{font-family:'Press Start 2P',ui-monospace,monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#1D9E75;margin-bottom:18px}
-#scan-decode{font-family:ui-monospace,Menlo,monospace;font-size:13px;margin-bottom:18px;padding:10px 14px;background:#f5f5f5;border-radius:4px;word-break:break-all}
+#scan-card{background:#fff;border-radius:8px;padding:14px 16px;max-width:620px;width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,0.4);font-family:system-ui,sans-serif;color:#222;position:relative}
+#scan-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+#scan-header h3{font-family:'Press Start 2P',ui-monospace,monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#1D9E75;margin:0;white-space:nowrap}
+#scan-decode{font-family:ui-monospace,Menlo,monospace;font-size:12px;flex:1;word-break:break-all;min-width:0}
 #scan-decode .ok{color:#1D9E75}
 #scan-decode .bad{color:#A32D2D}
-#scan-table{width:100%;border-collapse:collapse;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-bottom:18px}
-#scan-table th,#scan-table td{padding:6px 10px;text-align:center;border-bottom:1px solid #eee}
+#scan-close{position:absolute;top:10px;right:10px;background:none;border:none;font-size:18px;color:#aaa;cursor:pointer;padding:2px 6px;line-height:1;transition:color .15s}
+#scan-close:hover{color:#E24B4A}
+#scan-table{width:100%;border-collapse:collapse;font-family:ui-monospace,Menlo,monospace;font-size:11px;margin-bottom:8px}
+#scan-table th,#scan-table td{padding:4px 6px;text-align:center;border-bottom:1px solid #eee}
 #scan-table th{color:#888;font-weight:normal;font-size:10px;text-transform:uppercase;letter-spacing:.06em;cursor:help;position:relative}
 #scan-table th:first-child{text-align:left;cursor:default}
 #scan-table td:first-child{text-align:left;font-weight:500}
-tr.delta td{color:#A32D2D;font-size:11px}
+tr.delta td{color:#A32D2D;font-size:10px}
 #scan-table th .tip{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#222;color:#eee;font-family:system-ui,sans-serif;font-size:11px;font-weight:normal;letter-spacing:0;text-transform:none;padding:8px 12px;border-radius:4px;width:220px;text-align:left;line-height:1.45;z-index:30;box-shadow:0 4px 14px rgba(0,0,0,0.3);pointer-events:none;white-space:normal}
 #scan-table th:hover .tip{display:block}
 /* old heatmap removed — data placement map replaces it */
 #charmap-container{position:relative}
-#charmap{display:flex;flex-wrap:wrap;gap:2px;margin-bottom:10px;justify-content:center}
+#charmap{display:flex;flex-wrap:wrap;gap:2px;margin-bottom:6px;justify-content:center}
 .char-box{display:inline-flex;align-items:center;justify-content:center;width:18px;height:22px;border:1px solid #d0d0d8;border-radius:2px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#444;cursor:pointer;transition:all .12s;user-select:none;background:#fafafa}
 .char-box:hover{border-color:#2196f3;background:#e3f2fd}
 .char-box.on{background:#1565c0;color:#fff;border-color:#0d47a1}
@@ -113,7 +113,6 @@ tr.delta td{color:#A32D2D;font-size:11px}
     <a id="back" href="../index.html">&larr; back</a>
     <div id="read-status"><span class="unknown">QR READABILITY: UNKNOWN</span><span class="stale">must scan to verify</span></div>
     <button id="scan-btn" type="button">scan</button>
-    <button id="mvp-btn" type="button">mvp?</button>
     <button id="share" type="button">link</button>
   </div>
   <div id="term">
@@ -138,11 +137,10 @@ tr.delta td{color:#A32D2D;font-size:11px}
   <div id="hint">autonomous demo</div>
   <div id="scan-modal">
     <div id="scan-card">
-      <h3>Scan Complete</h3>
-      <div id="scan-decode"></div>
+      <button id="scan-close" type="button">&times;</button>
+      <div id="scan-header"><h3>Scan</h3><span id="scan-decode"></span></div>
       <table id="scan-table"><thead><tr><th></th><th>Rule 1<span class="tip">+3 for each row/column with 5+ consecutive same-color modules, +1 per extra. Penalizes long horizontal/vertical streaks.</span></th><th>Rule 2<span class="tip">+3 for every 2×2 block of the same color. Counts overlapping blocks. Penalizes large monochrome patches.</span></th><th>Rule 3<span class="tip">+40 for each finder-like pattern (1:1:3:1:1) followed or preceded by 4 light modules. Prevents false detection locks.</span></th><th>Rule 4<span class="tip">+10 × floor(|%dark − 50| / 5). Penalizes imbalanced dark/light ratios across the matrix.</span></th><th>Total</th></tr></thead><tbody id="scan-tbody"></tbody></table>
-      <h3 style="margin-top:18px">Data Placement Map</h3>
-      <p style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5">Click any letter to see which modules carry its bits. <b style="color:#2196f3">D1–D55</b> = data, <b style="color:#ff9800">E1–E15</b> = ECC. Bits are 4 off from byte boundaries due to the 12-bit header.</p>
+      <p style="font-size:10px;color:#888;margin:6px 0 4px;line-height:1.4">Click a letter → see its bits. <b style="color:#2196f3">D</b>=data <b style="color:#ff9800">E</b>=ECC</p>
       <div id="charmap-container">
         <div id="charmap"></div>
         <div id="datamap-wrap" style="overflow-x:auto;margin-bottom:18px">
@@ -151,7 +149,7 @@ tr.delta td{color:#A32D2D;font-size:11px}
         <canvas id="connect-lines"></canvas>
         <div id="datamap-tip"></div>
       </div>
-      <button id="scan-close" type="button">close</button>
+      <!-- close button is now the × in scan-card top-right -->
     </div>
   </div>
   <div id="controls">
@@ -593,6 +591,11 @@ function loop(ts){
 
   if(!intro&&!relocating){
     if(!lastStep) lastStep=ts;
+    // Auto-start MVP after landing glee fades
+    if(pendingMVPStart&&ts>gleeUntil){
+      pendingMVPStart=false;
+      startMVPAuto();
+    }
     const stepMs=mvpMode?Math.round(STEP_MS/MVP_STEP_FACTOR):STEP_MS;
     if(ts-lastStep>=stepMs){
       if(mvpMode&&!mvpDone) tickMVP(); else if(!mvpMode) tick();
@@ -616,7 +619,7 @@ function loop(ts){
         } else {
           anger=0;
           gleeUntil=ts+GLEE_MS;
-          scheduleNextRage(ts);
+          pendingMVPStart=true; // start MVP after glee fades
         }
       }
     }
@@ -752,9 +755,8 @@ function regenerateMaze(newText){
   visited=Array.from({length:SIZE},()=>Array(SIZE).fill(false));
   destroyedAtLastScan=0; lastScanReadable=null; lastScanPct=null;
   mvpMode=false; mvpDone=false; mvpPhase=0; mvpWaitingForScan=false;
+  pendingMVPStart=false;
   mvpExpendable.clear(); mvpIndestructible.clear();
-  document.getElementById('mvp-btn').classList.remove('on');
-  document.getElementById('mvp-btn').textContent='mvp?';
   intro=true; introStart=0; lastStep=0;
   placeInvader();
   updateMeter();
@@ -1278,46 +1280,24 @@ function tickMVP(){
   moveStart=performance.now();
 }
 
-let preMvpAggro=50; // stash the slider value before MVP to restore on exit
+let pendingMVPStart=false;
 
-function toggleMVP(){
-  mvpMode=!mvpMode;
-  const btn=document.getElementById('mvp-btn');
-  if(mvpMode){
-    btn.classList.add('on');
-    btn.textContent='MVP ON';
-    const mvp=computeMVP();
-    mvpExpendable=mvp.expendable;
-    mvpIndestructible=mvp.indestructible;
-    mvpDone=false;
-    mvpPhase=1;
-    mvpWaitingForScan=false;
-    mvpFireNext=performance.now()+600;
-    rageStart=0; burstRemaining=0; landingShots=0;
-    anger=2.2;
-    gleeUntil=0;
-    setTerminalEmotion('angry');
-    setTermMsg('destroying expendable codewords...','#E24B4A');
-    preMvpAggro=aggroSlider.getValue();
-    aggroSlider.setValue(100);
-  } else {
-    btn.classList.remove('on');
-    btn.textContent='mvp?';
-    mvpExpendable.clear();
-    mvpIndestructible.clear();
-    mvpDone=false;
-    mvpPhase=0;
-    mvpWaitingForScan=false;
-    anger=0;
-    gleeUntil=0;
-    scheduleNextRage(performance.now());
-    setTerminalEmotion('determined');
-    setTermMsg('');
-    aggroSlider.setValue(preMvpAggro);
-  }
+function startMVPAuto(){
+  mvpMode=true;
+  const mvp=computeMVP();
+  mvpExpendable=mvp.expendable;
+  mvpIndestructible=mvp.indestructible;
+  mvpDone=false;
+  mvpPhase=1;
+  mvpWaitingForScan=false;
+  mvpFireNext=performance.now()+600;
+  rageStart=0; burstRemaining=0;
+  anger=2.2;
+  gleeUntil=0;
+  setTerminalEmotion('angry');
+  setTermMsg('destroying expendable codewords...','#E24B4A');
+  aggroSlider.setValue(100);
 }
-
-document.getElementById('mvp-btn').addEventListener('click',toggleMVP);
 
 // ── MVP Phase 2: empirical structural destruction via jsQR testing ──────────
 // Decode test at a given pixel-per-module scale.
@@ -1657,11 +1637,11 @@ function createBlockSlider(trackEl,valEl,min,max,step,initial,formatter,onChange
 const aggroSlider=createBlockSlider(
   document.getElementById('aggro-track'),
   document.getElementById('aggro-pct'),
-  0,100,5,50,
+  0,100,5,100,
   v=>Math.round(v)+'%',
   v=>{aggroFactor=v/100;}
 );
-aggroFactor=0.5;
+aggroFactor=1.0;
 
 placeInvader();
 updateMeter();
