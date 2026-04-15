@@ -27,6 +27,7 @@ body{background:#fff;font-family:system-ui,sans-serif;display:flex;justify-conte
 #share{font-family:inherit;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#888;padding:4px 8px;border:1px solid #ddd;border-radius:3px;background:#fff;cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap}
 #share:hover,#share.copied{color:#1D9E75;border-color:#1D9E75}
 
+#term-msg{font-family:'Press Start 2P',ui-monospace,monospace;font-size:7px;color:#5DCAA5;margin-top:4px;line-height:1.4;min-height:0;transition:color .3s}
 /* status: small line inside terminal, bottom-right */
 #status{font-family:'Press Start 2P',ui-monospace,monospace;font-size:7px;color:rgba(29,158,117,0.55);text-align:right;margin-top:4px;letter-spacing:.03em;line-height:1.3;transition:color .3s}
 
@@ -119,6 +120,7 @@ tr.delta td{color:#A32D2D;font-size:11px}
     <div id="term-line"><span class="tp">emotions@qr-invader</span><span class="td">:~</span><span class="tc">$ show </span><span id="term-cmd">determined</span><span id="term-cur">_</span></div>
     <div id="term-braille">&#10240;&#10240;&#10240;&#10240;
 &#10240;&#10240;&#10240;&#10240;</div>
+    <div id="term-msg"></div>
     <div id="status">read the code before it is too late</div>
   </div>
   <canvas id="c"></canvas>
@@ -687,7 +689,9 @@ function loop(ts){
     if(b.x<QX||b.x>QX+SIZE*MOD||b.y<QY||b.y>QY+SIZE*MOD) return false;
     const col=Math.floor((b.x-QX)/MOD), row=Math.floor((b.y-QY)/MOD);
     if(row>=0&&row<SIZE&&col>=0&&col<SIZE && alive[row][col]===1){
-      const shielded=isProtected(row,col)||(mvpMode&&mvpIndestructible.has(row+','+col));
+      const shielded=mvpMode
+        ?!mvpExpendable.has(row+','+col)   // MVP: only expendable modules can break
+        :isProtected(row,col);              // Normal: protect finder corners
       if(!shielded){
         crumbleModule(row,col);
         spawnParticles(QX+col*MOD+MOD/2, QY+row*MOD+MOD/2, true);
@@ -746,7 +750,8 @@ function regenerateMaze(newText){
   landingShots=0; landingShotNext=0;
   visited=Array.from({length:SIZE},()=>Array(SIZE).fill(false));
   destroyedAtLastScan=0; lastScanReadable=null; lastScanPct=null;
-  mvpMode=false; mvpDone=false; mvpExpendable.clear(); mvpIndestructible.clear();
+  mvpMode=false; mvpDone=false; mvpPhase=0; mvpWaitingForScan=false;
+  mvpExpendable.clear(); mvpIndestructible.clear();
   document.getElementById('mvp-btn').classList.remove('on');
   document.getElementById('mvp-btn').textContent='mvp?';
   intro=true; introStart=0; lastStep=0;
@@ -1133,6 +1138,14 @@ initDatamapHover();
 // ══════════════════════════════════════════════════════════════════════════════
 let mvpMode=false;
 let mvpDone=false;
+let mvpPhase=0;          // 0=off, 1=data/ECC destruction, 2=structural, 3=complete
+let mvpWaitingForScan=false;
+
+function setTermMsg(txt,color){
+  const el=document.getElementById('term-msg');
+  el.textContent=txt;
+  el.style.color=color||'#5DCAA5';
+}
 let mvpExpendable=new Set();     // "r,c" strings of cells OK to destroy
 let mvpIndestructible=new Set(); // "r,c" of cells that MUST survive
 let mvpFireNext=0;               // ts for next targeted shot
@@ -1204,11 +1217,22 @@ function tickMVP(){
     if(alive[r][c]===1){anyLeft=true;break;}
   }
   if(!anyLeft){
-    if(!mvpDone){
+    if(mvpPhase===1&&!mvpWaitingForScan){
+      // Phase 1 done — prompt user to scan
+      mvpDone=true;
+      mvpWaitingForScan=true;
+      anger=0;
+      gleeUntil=Infinity;
+      setTerminalEmotion('glee');
+      setTermMsg('SCAN NOW to verify readability!','#5DCAA5');
+    } else if(mvpPhase===2&&!mvpDone){
+      // Phase 2 done — TRUE minimum viable QR!
       mvpDone=true;
       anger=0;
       gleeUntil=Infinity;
       setTerminalEmotion('glee');
+      setTermMsg('TRUE MINIMUM VIABLE QR achieved! Scan to verify.','#3ACBB8');
+      mvpPhase=3;
     }
     return;
   }
@@ -1268,12 +1292,15 @@ function toggleMVP(){
     mvpExpendable=mvp.expendable;
     mvpIndestructible=mvp.indestructible;
     mvpDone=false;
+    mvpPhase=1;
+    mvpWaitingForScan=false;
     mvpFireNext=performance.now()+600;
     // Cancel any normal rage state
     rageStart=0; burstRemaining=0; landingShots=0;
     anger=2.2;
     gleeUntil=0;
     setTerminalEmotion('angry');
+    setTermMsg('destroying expendable codewords...','#E24B4A');
     // Max aggro
     preMvpAggro=parseInt(slider.value);
     slider.value=100;
@@ -1284,10 +1311,13 @@ function toggleMVP(){
     mvpExpendable.clear();
     mvpIndestructible.clear();
     mvpDone=false;
+    mvpPhase=0;
+    mvpWaitingForScan=false;
     anger=0;
     gleeUntil=0;
     scheduleNextRage(performance.now());
     setTerminalEmotion('determined');
+    setTermMsg('');
     // Restore previous aggro
     slider.value=preMvpAggro;
     updateAggro();
@@ -1295,6 +1325,66 @@ function toggleMVP(){
 }
 
 document.getElementById('mvp-btn').addEventListener('click',toggleMVP);
+
+// ── MVP Phase 2: empirical structural destruction via jsQR testing ──────────
+function testDecode(){
+  const n=SIZE, px=8, quiet=4, total=(n+quiet*2)*px;
+  const cv=document.createElement('canvas');
+  cv.width=total; cv.height=total;
+  const cx=cv.getContext('2d');
+  cx.fillStyle='#fff'; cx.fillRect(0,0,total,total);
+  cx.fillStyle='#000';
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++)
+    if(alive[r][c]) cx.fillRect((c+quiet)*px,(r+quiet)*px,px,px);
+  const img=cx.getImageData(0,0,total,total);
+  try{ const d=jsQR(img.data,total,total); return d&&d.data===mazeText; }
+  catch(e){ return false; }
+}
+
+function computeStructuralExpendable(){
+  // Greedy: try destroying each structural dark module, test with jsQR.
+  // If still readable, mark it expendable. Restore all afterward so the
+  // invader can crumble them visually.
+  const types=classifyModules(SIZE,(SIZE-17)/4);
+  const candidates=[];
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+    if(types[r][c]!=='data'&&alive[r][c]===1) candidates.push({r,c});
+  }
+  // Shuffle for variety (different patterns each run)
+  for(let i=candidates.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [candidates[i],candidates[j]]=[candidates[j],candidates[i]];
+  }
+  const safe=[];
+  for(const {r,c} of candidates){
+    alive[r][c]=0;
+    if(testDecode()) safe.push({r,c});
+    else alive[r][c]=1; // restore — too critical
+  }
+  // Restore all safe ones so invader can crumble them with visual effect
+  for(const {r,c} of safe) alive[r][c]=1;
+  return safe;
+}
+
+function startMVPPhase2(){
+  document.getElementById('scan-modal').classList.remove('on');
+  setTerminalEmotion('angry');
+  setTermMsg('COMPUTING structural vulnerabilities...','#EF9F27');
+
+  setTimeout(()=>{
+    const structExp=computeStructuralExpendable();
+    for(const {r,c} of structExp){
+      mvpExpendable.add(r+','+c);
+      mvpIndestructible.delete(r+','+c);
+    }
+    mvpPhase=2;
+    mvpDone=false;
+    gleeUntil=0;
+    anger=2.5;
+    setTermMsg('WHAT! destroying '+structExp.length+' structural modules too!','#E24B4A');
+    mvpFireNext=performance.now()+600;
+  },150); // let UI update before heavy computation
+}
 
 // ── Character ↔ cell mapping: click a letter, see its bits in the QR ────────
 let charCellMap=[];   // charCellMap[i] = [{r,c},...] — 8 cells for char i
@@ -1464,6 +1554,13 @@ function showScanResults(){
   updateMeter();
 
   document.getElementById('scan-modal').classList.add('on');
+
+  // MVP: if phase 1 just completed and scan confirms readable → trigger phase 2
+  if(mvpWaitingForScan&&lastScanReadable){
+    mvpWaitingForScan=false;
+    // Let the user see the scan result for 2.5s, then auto-close and start phase 2
+    setTimeout(startMVPPhase2,2500);
+  }
 }
 
 document.getElementById('scan-btn').addEventListener('click',startScan);
