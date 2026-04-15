@@ -1150,8 +1150,13 @@ function fireAtTarget(target){
 }
 
 function tickMVP(){
-  const target=findNearestExpendableAlive();
-  if(!target){
+  // Check if any expendable targets remain
+  let anyLeft=false;
+  for(const key of mvpExpendable){
+    const [r,c]=key.split(',').map(Number);
+    if(alive[r][c]===1){anyLeft=true;break;}
+  }
+  if(!anyLeft){
     if(!mvpDone){
       mvpDone=true;
       anger=0;
@@ -1160,20 +1165,45 @@ function tickMVP(){
     }
     return;
   }
-  // Bias movement toward target (80% optimal, 20% random for organic feel)
-  const cands=[];
-  for(let d=0;d<4;d++){
-    const nr=invR+DIRS[d][0], nc=invC+DIRS[d][1];
-    if(nr<0||nr>=SIZE||nc<0||nc>=SIZE||alive[nr][nc]===1) continue;
-    const dist=Math.abs(nr-target.r)+Math.abs(nc-target.c);
-    cands.push({nr,nc,dist});
+
+  // BFS from invader through walkable (white) cells to find the nearest
+  // white cell adjacent to an expendable alive module, then trace back
+  // to get the first step along the shortest path.
+  const vis=Array.from({length:SIZE},()=>Array(SIZE).fill(false));
+  const par=Array.from({length:SIZE},()=>Array(SIZE).fill(null));
+  const q=[{r:invR,c:invC}];
+  vis[invR][invC]=true;
+  let goal=null;
+
+  while(q.length>0&&!goal){
+    const cur=q.shift();
+    for(let d=0;d<4;d++){
+      const nr=cur.r+DIRS[d][0], nc=cur.c+DIRS[d][1];
+      if(nr<0||nr>=SIZE||nc<0||nc>=SIZE||vis[nr][nc]) continue;
+      vis[nr][nc]=true;
+      par[nr][nc]={r:cur.r,c:cur.c};
+      // Is this neighbor an expendable alive module? (dark wall we want to destroy)
+      if(alive[nr][nc]===1&&mvpExpendable.has(nr+','+nc)){
+        goal={r:cur.r,c:cur.c}; // the white cell adjacent to the target
+        break;
+      }
+      // If walkable (white), keep searching
+      if(alive[nr][nc]===0) q.push({r:nr,c:nc});
+    }
   }
-  if(cands.length===0) return; // stuck, skip this tick
-  cands.sort((a,b)=>a.dist-b.dist);
-  const pick=Math.random()<0.8?cands[0]:cands[Math.floor(Math.random()*cands.length)];
-  visited[invR][invC]=true;
+
+  if(!goal) return; // unreachable (shouldn't happen in a connected maze)
+
+  // Trace back from goal to invader to find the first step
+  let step=goal;
+  while(par[step.r][step.c]&&!(par[step.r][step.c].r===invR&&par[step.r][step.c].c===invC)){
+    step=par[step.r][step.c];
+  }
+  // If goal IS the invader position (target is adjacent), don't move — just fire
+  if(step.r===invR&&step.c===invC) return;
+
   invFromR=invR; invFromC=invC;
-  invR=pick.nr; invC=pick.nc;
+  invR=step.r; invC=step.c;
   moveStart=performance.now();
 }
 
