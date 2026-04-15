@@ -128,8 +128,8 @@ tr.delta td{color:#A32D2D;font-size:11px}
       <div class="sc"><div class="sc-l">fired</div><div class="sc-v" id="v-shots">0</div></div>
     </div>
     <div id="aggro-wrap">
-      <div id="aggro-label">aggro <span id="aggro-bar">&#9646;&#9646;&#9646;&#9647;&#9647;&#9647;&#9647;&#9647;&#9647;&#9647;&#9647;&#9647;</span> <span id="aggro-pct">25%</span></div>
-      <input id="aggro" type="range" min="0" max="100" value="25">
+      <div id="aggro-label">aggro <span id="aggro-bar">&#9646;&#9646;&#9646;&#9646;&#9646;&#9646;&#9647;&#9647;&#9647;&#9647;&#9647;&#9647;</span> <span id="aggro-pct">50%</span></div>
+      <input id="aggro" type="range" min="0" max="100" value="50">
     </div>
   </div>
   <div id="hint">autonomous demo</div>
@@ -226,7 +226,7 @@ const STEP_MS=260;
 let lastStep=0;
 
 // ── Aggro factor (0..1) — drives all timing parameters ─────────────────────
-let aggroFactor=0.25;
+let aggroFactor=0.50;
 function lerp(a,b,t){return a+(b-a)*t;}
 function getCalmMin(){return lerp(10000,2000,aggroFactor);}
 function getCalmMax(){return lerp(15000,4000,aggroFactor);}
@@ -1254,9 +1254,12 @@ function tickMVP(){
   moveStart=performance.now();
 }
 
+let preMvpAggro=50; // stash the slider value before MVP to restore on exit
+
 function toggleMVP(){
   mvpMode=!mvpMode;
   const btn=document.getElementById('mvp-btn');
+  const slider=document.getElementById('aggro');
   if(mvpMode){
     btn.classList.add('on');
     btn.textContent='MVP ON';
@@ -1268,9 +1271,13 @@ function toggleMVP(){
     mvpFireNext=performance.now()+600;
     // Cancel any normal rage state
     rageStart=0; burstRemaining=0; landingShots=0;
-    anger=2.2; // permanent angry-red
+    anger=2.2;
     gleeUntil=0;
     setTerminalEmotion('angry');
+    // Max aggro
+    preMvpAggro=parseInt(slider.value);
+    slider.value=100;
+    updateAggro();
   } else {
     btn.classList.remove('on');
     btn.textContent='mvp?';
@@ -1281,6 +1288,9 @@ function toggleMVP(){
     gleeUntil=0;
     scheduleNextRage(performance.now());
     setTerminalEmotion('determined');
+    // Restore previous aggro
+    slider.value=preMvpAggro;
+    updateAggro();
   }
 }
 
