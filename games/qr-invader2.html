@@ -21,6 +21,9 @@ body{background:#fff;font-family:system-ui,sans-serif;display:flex;justify-conte
 #read-status .stale{color:#888;font-family:ui-monospace,Menlo,monospace;font-size:9px;display:block;margin-top:1px}
 #scan-btn{background:transparent;color:#1D9E75;border:1px solid #1D9E75;font-family:'Press Start 2P',ui-monospace,monospace;font-size:8px;padding:4px 10px;border-radius:3px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .15s;white-space:nowrap}
 #scan-btn:hover{background:#1D9E75;color:#fff}
+#mvp-btn{background:transparent;color:#BA7517;border:1px solid #BA7517;font-family:'Press Start 2P',ui-monospace,monospace;font-size:8px;padding:4px 10px;border-radius:3px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .15s;white-space:nowrap}
+#mvp-btn:hover{background:#BA7517;color:#fff}
+#mvp-btn.on{background:#E24B4A;color:#fff;border-color:#E24B4A}
 #share{font-family:inherit;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#888;padding:4px 8px;border:1px solid #ddd;border-radius:3px;background:#fff;cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap}
 #share:hover,#share.copied{color:#1D9E75;border-color:#1D9E75}
 
@@ -109,6 +112,7 @@ tr.delta td{color:#A32D2D;font-size:11px}
     <a id="back" href="../index.html">&larr; back</a>
     <div id="read-status"><span class="unknown">QR READABILITY: UNKNOWN</span><span class="stale">must scan to verify</span></div>
     <button id="scan-btn" type="button">scan</button>
+    <button id="mvp-btn" type="button">mvp?</button>
     <button id="share" type="button">link</button>
   </div>
   <div id="term">
@@ -369,8 +373,12 @@ function drawQR(){
     if(alive[r][c]===1){
       ctx.fillStyle=isProtected(r,c)?'#0a0a0a':'#1a1a1a';
       ctx.fillRect(px,py,MOD,MOD);
+      // MVP: tint indestructible modules green so user can see the shield
+      if(mvpMode&&mvpIndestructible.has(r+','+c)){
+        ctx.fillStyle='rgba(29,158,117,0.2)';
+        ctx.fillRect(px,py,MOD,MOD);
+      }
     } else if(debris[r][c].length>0){
-      // Crumbled module: draw scattered pixel remnants
       ctx.fillStyle='rgba(26,26,26,0.75)';
       for(const {dx,dy} of debris[r][c]){
         ctx.fillRect(px+dx,py+dy,1,1);
@@ -536,7 +544,17 @@ function loop(ts){
 
   if(!intro){
     if(!lastStep) lastStep=ts;
-    if(ts-lastStep>=STEP_MS){ tick(); lastStep=ts; }
+    const stepMs=mvpMode?Math.round(STEP_MS/MVP_STEP_FACTOR):STEP_MS;
+    if(ts-lastStep>=stepMs){
+      if(mvpMode&&!mvpDone) tickMVP(); else if(!mvpMode) tick();
+      lastStep=ts;
+    }
+    // MVP targeted fire
+    if(mvpMode&&!mvpDone&&ts>=mvpFireNext){
+      const tgt=findNearestExpendableAlive();
+      if(tgt){fireAtTarget(tgt);mvpFireNext=ts+MVP_FIRE_INTERVAL;}
+      anger=2.2+(Math.sin(ts*0.008)*0.5); // fluctuate between frustrated and angry
+    }
 
     // Landing burst: fire 2 quick shots right after touchdown.
     if(landingShots>0){
@@ -621,7 +639,8 @@ function loop(ts){
     if(b.x<QX||b.x>QX+SIZE*MOD||b.y<QY||b.y>QY+SIZE*MOD) return false;
     const col=Math.floor((b.x-QX)/MOD), row=Math.floor((b.y-QY)/MOD);
     if(row>=0&&row<SIZE&&col>=0&&col<SIZE && alive[row][col]===1){
-      if(!isProtected(row,col)){
+      const shielded=isProtected(row,col)||(mvpMode&&mvpIndestructible.has(row+','+col));
+      if(!shielded){
         crumbleModule(row,col);
         spawnParticles(QX+col*MOD+MOD/2, QY+row*MOD+MOD/2, true);
         hits++;
@@ -679,6 +698,9 @@ function regenerateMaze(newText){
   landingShots=0; landingShotNext=0;
   visited=Array.from({length:SIZE},()=>Array(SIZE).fill(false));
   destroyedAtLastScan=0; lastScanReadable=null; lastScanPct=null;
+  mvpMode=false; mvpDone=false; mvpExpendable.clear(); mvpIndestructible.clear();
+  document.getElementById('mvp-btn').classList.remove('on');
+  document.getElementById('mvp-btn').textContent='mvp?';
   intro=true; introStart=0; lastStep=0;
   placeInvader();
   updateMeter();
@@ -1054,6 +1076,137 @@ function initDatamapHover(){
   cv.addEventListener('click',show); // mobile tap
 }
 initDatamapHover();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MVP MODE — Minimum Viable QR
+// Computes which codewords can be sacrificed while keeping the QR decodable,
+// then sets the invader to berserker mode: permanent angry, 3× speed, targeted
+// fire at expendable modules only. Indestructible modules are shielded.
+// ══════════════════════════════════════════════════════════════════════════════
+let mvpMode=false;
+let mvpDone=false;
+let mvpExpendable=new Set();     // "r,c" strings of cells OK to destroy
+let mvpIndestructible=new Set(); // "r,c" of cells that MUST survive
+let mvpFireNext=0;               // ts for next targeted shot
+const MVP_FIRE_INTERVAL=450;     // ms between targeted shots
+const MVP_STEP_FACTOR=3;         // speed multiplier
+
+function computeMVP(){
+  const n=SIZE, ver=(n-17)/4;
+  const pos=computeDataPlacement(n,ver);
+  const types=classifyModules(n,ver);
+  const split=V3_CODEWORDS['L']||{data:55,ecc:15};
+  const totalCW=split.data+split.ecc;
+  const maxErrors=Math.floor(split.ecc/2); // 7 for ECC-L with 15 ECC codewords
+
+  // Score each codeword by how many dark modules it has (maximize visual destruction)
+  const cwInfo=[];
+  for(let cw=0;cw<totalCW;cw++){
+    const cells=pos.slice(cw*8,cw*8+8);
+    let darkCount=0;
+    for(const {r,c} of cells) if(QR[r][c]===1) darkCount++;
+    cwInfo.push({cw,darkCount,cells});
+  }
+  // Sacrifice the codewords with the most dark modules
+  cwInfo.sort((a,b)=>b.darkCount-a.darkCount);
+  const sacrificed=new Set(cwInfo.slice(0,maxErrors).map(s=>s.cw));
+
+  const exp=new Set(), ind=new Set();
+  for(let cw=0;cw<totalCW;cw++){
+    const cells=pos.slice(cw*8,cw*8+8);
+    for(const {r,c} of cells){
+      const key=r+','+c;
+      if(sacrificed.has(cw)) exp.add(key); else ind.add(key);
+    }
+  }
+  // All structural modules are indestructible
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+    if(types[r][c]!=='data') ind.add(r+','+c);
+  }
+  return {expendable:exp,indestructible:ind,maxErrors,sacrificedCount:sacrificed.size};
+}
+
+function findNearestExpendableAlive(){
+  let best=null, bestD=Infinity;
+  for(const key of mvpExpendable){
+    const [r,c]=key.split(',').map(Number);
+    if(alive[r][c]!==1) continue;
+    const d=Math.abs(r-invR)+Math.abs(c-invC);
+    if(d<bestD){bestD=d;best={r,c};}
+  }
+  return best;
+}
+
+function fireAtTarget(target){
+  shots++;
+  document.getElementById('v-shots').textContent=shots;
+  const from=cellCenter(invR,invC);
+  const to=cellCenter(target.r,target.c);
+  const dx=to.x-from.x, dy=to.y-from.y;
+  const dist=Math.sqrt(dx*dx+dy*dy)||1;
+  const speed=6;
+  bullets.push({x:from.x,y:from.y,vx:dx/dist*speed,vy:dy/dist*speed,life:200});
+}
+
+function tickMVP(){
+  const target=findNearestExpendableAlive();
+  if(!target){
+    if(!mvpDone){
+      mvpDone=true;
+      anger=0;
+      gleeUntil=Infinity;
+      setTerminalEmotion('glee');
+    }
+    return;
+  }
+  // Bias movement toward target (80% optimal, 20% random for organic feel)
+  const cands=[];
+  for(let d=0;d<4;d++){
+    const nr=invR+DIRS[d][0], nc=invC+DIRS[d][1];
+    if(nr<0||nr>=SIZE||nc<0||nc>=SIZE||alive[nr][nc]===1) continue;
+    const dist=Math.abs(nr-target.r)+Math.abs(nc-target.c);
+    cands.push({nr,nc,dist});
+  }
+  if(cands.length===0) return; // stuck, skip this tick
+  cands.sort((a,b)=>a.dist-b.dist);
+  const pick=Math.random()<0.8?cands[0]:cands[Math.floor(Math.random()*cands.length)];
+  visited[invR][invC]=true;
+  invFromR=invR; invFromC=invC;
+  invR=pick.nr; invC=pick.nc;
+  moveStart=performance.now();
+}
+
+function toggleMVP(){
+  mvpMode=!mvpMode;
+  const btn=document.getElementById('mvp-btn');
+  if(mvpMode){
+    btn.classList.add('on');
+    btn.textContent='MVP ON';
+    // Compute the minimum viable set
+    const mvp=computeMVP();
+    mvpExpendable=mvp.expendable;
+    mvpIndestructible=mvp.indestructible;
+    mvpDone=false;
+    mvpFireNext=performance.now()+600;
+    // Cancel any normal rage state
+    rageStart=0; burstRemaining=0; landingShots=0;
+    anger=2.2; // permanent angry-red
+    gleeUntil=0;
+    setTerminalEmotion('angry');
+  } else {
+    btn.classList.remove('on');
+    btn.textContent='mvp?';
+    mvpExpendable.clear();
+    mvpIndestructible.clear();
+    mvpDone=false;
+    anger=0;
+    gleeUntil=0;
+    scheduleNextRage(performance.now());
+    setTerminalEmotion('determined');
+  }
+}
+
+document.getElementById('mvp-btn').addEventListener('click',toggleMVP);
 
 // ── Character ↔ cell mapping: click a letter, see its bits in the QR ────────
 let charCellMap=[];   // charCellMap[i] = [{r,c},...] — 8 cells for char i
