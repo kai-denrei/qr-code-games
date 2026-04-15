@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>QR Snake v2</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0d12;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:'Share Tech Mono',monospace;color:#ccc}
+#back{position:fixed;top:14px;left:14px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#555;text-decoration:none;padding:6px 10px;border:1px solid #2a2a3a;border-radius:4px;background:#14141e;transition:color .15s,border-color .15s}
+#back:hover{color:#5DCAA5;border-color:#5DCAA5}
+#share{position:fixed;top:14px;right:14px;font-family:'Share Tech Mono',ui-monospace,monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#555;padding:6px 10px;border:1px solid #2a2a3a;border-radius:4px;background:#14141e;cursor:pointer;transition:color .15s,border-color .15s}
+#share:hover,#share.copied{color:#5DCAA5;border-color:#5DCAA5}
+#ui{width:310px;padding:0 0 10px}
+#top-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+#rl{font-size:11px;color:#555;letter-spacing:.08em;text-transform:uppercase}
+#pct{font-size:13px;color:#9f97e8;font-weight:bold}
+#bar-bg{width:100%;height:6px;background:#1a1a2a;border-radius:3px;overflow:hidden;margin-bottom:8px}
+#bar-fill{height:100%;width:100%;border-radius:3px;background:#5DCAA5;transition:width .15s,background .3s}
+#status{font-size:12px;text-align:center;min-height:16px;letter-spacing:.04em;color:#888}
+#status.warn{color:#EF9F27;animation:blink .45s step-end infinite}
+#status.back{color:#9060d0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+canvas{display:block;cursor:pointer}
+#footer{display:flex;justify-content:space-between;width:310px;margin-top:8px}
+.stat{text-align:center}
+.sl{font-size:10px;color:#444;letter-spacing:.06em;text-transform:uppercase}
+.sv{font-size:16px;color:#7F77DD}
+#hint{font-size:10px;color:#2a2a3a;text-align:center;margin-top:6px;letter-spacing:.04em}
+#overlay{position:fixed;top:12px;left:50%;transform:translateX(-50%);max-width:calc(100vw - 120px);background:rgba(13,13,18,0.62);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(93,202,165,0.4);border-radius:6px;padding:12px 20px 14px;display:none;flex-direction:column;align-items:center;gap:10px;font-family:'Share Tech Mono',monospace;color:#ccc;z-index:10;box-shadow:0 0 28px rgba(93,202,165,0.18),0 4px 18px rgba(0,0,0,0.5)}
+#overlay.on{display:flex}
+#ov-title{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#5DCAA5;text-shadow:0 0 10px rgba(93,202,165,.55);text-align:center;line-height:1.35}
+#ov-stats{display:flex;gap:22px}
+.ov-stat{text-align:center}
+.ov-l{font-size:9px;color:#555;letter-spacing:.12em;text-transform:uppercase}
+.ov-v{font-size:16px;color:#9f97e8;margin-top:2px}
+#ov-btn{font-family:inherit;background:transparent;color:#888;border:1px solid #2a2a3a;padding:6px 14px;letter-spacing:.14em;text-transform:uppercase;font-size:10px;cursor:pointer;transition:color .15s,border-color .15s}
+#ov-btn:hover{color:#5DCAA5;border-color:#5DCAA5}
+#maze-input{display:flex;gap:6px;width:310px;margin-top:12px}
+#maze-text{flex:1;background:#0b0b11;border:1px solid #2a2a3a;color:#ccc;font-family:'Share Tech Mono',monospace;font-size:11px;padding:6px 10px;border-radius:4px;outline:none;transition:border-color .15s;min-width:0}
+#maze-text:focus{border-color:#5DCAA5}
+#maze-go{background:transparent;color:#5DCAA5;border:1px solid #2a2a3a;font-family:'Share Tech Mono',monospace;font-size:11px;padding:6px 12px;border-radius:4px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .15s;white-space:nowrap}
+#maze-go:hover{background:#5DCAA5;color:#0b0b11;border-color:#5DCAA5}
+#maze-export{display:flex;gap:6px;width:310px;margin-top:6px;align-items:center}
+#export-size{background:#0b0b11;border:1px solid #2a2a3a;color:#ccc;font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 6px;border-radius:4px;outline:none;cursor:pointer;-webkit-appearance:none;appearance:none}
+.exp-btn{flex:1;background:transparent;color:#8a8a98;border:1px solid #2a2a3a;font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 10px;border-radius:4px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .15s;text-align:center}
+.exp-btn:hover{color:#5DCAA5;border-color:#5DCAA5}
+</style>
+</head>
+<body>
+<a id="back" href="../index.html">&larr; back</a>
+<button id="share" type="button">[ deep link ]</button>
+<div id="ui">
+  <div id="top-row"><span id="rl">QR readability</span><span id="pct">100%</span></div>
+  <div id="bar-bg"><div id="bar-fill"></div></div>
+  <div id="status">NAVIGATING</div>
+</div>
+<canvas id="c" width="310" height="310"></canvas>
+<div id="footer">
+  <div class="stat"><div class="sl">time</div><div class="sv" id="v-time">0.0s</div></div>
+  <div class="stat"><div class="sl">cleared</div><div class="sv" id="v-cleared">0</div></div>
+  <div class="stat"><div class="sl">readability</div><div class="sv" id="v-pct2">100%</div></div>
+</div>
+<div id="hint">CLICK / TAP to clear QR pixels &mdash; guide the snake to the &#127822;</div>
+<div id="maze-input">
+  <input id="maze-text" type="text" placeholder="maze text / url" spellcheck="false" autocomplete="off">
+  <button id="maze-go" type="button">regenerate</button>
+</div>
+<div id="maze-export">
+  <select id="export-size">
+    <option value="256">256px</option>
+    <option value="512" selected>512px</option>
+    <option value="1024">1024px</option>
+    <option value="2048">2048px</option>
+  </select>
+  <button class="exp-btn" id="dl-svg" type="button">svg</button>
+  <button class="exp-btn" id="dl-png" type="button">png</button>
+</div>
+<div id="overlay">
+  <div id="ov-title">Apple Reached &mdash; Forbidden Knowledge Unlocked</div>
+  <div id="ov-stats">
+    <div class="ov-stat"><div class="ov-l">time</div><div class="ov-v" id="ov-time">0.0s</div></div>
+    <div class="ov-stat"><div class="ov-l">readability</div><div class="ov-v" id="ov-pct">100%</div></div>
+    <div class="ov-stat"><div class="ov-l">cleared</div><div class="ov-v" id="ov-cleared">0</div></div>
+  </div>
+  <button id="ov-btn">Play Again</button>
+</div>
+
+<script src="qr-lab/vendor/qrcode-gen.js"></script>
+<script>
+// QR matrix is generated at boot from the input text (or ?q= query param).
+// Pinned to QR v3 (29×29) with ECC L so the game geometry is locked; the
+// ECC level gives ~53 byte capacity, plenty for a URL or short message.
+const DEFAULT_TEXT='https://www.grapplingprimitives.com';
+function buildMaze(text){
+  const qr=qrcode(3,'L'); // version 3 → 29×29; ECC L for headroom
+  qr.addData(text);
+  qr.make();
+  const n=qr.getModuleCount();
+  const m=[];
+  for(let r=0;r<n;r++){
+    const row=[];
+    for(let c=0;c<n;c++) row.push(qr.isDark(r,c)?1:0);
+    m.push(row);
+  }
+  return m;
+}
+let mazeText=new URLSearchParams(location.search).get('q')||DEFAULT_TEXT;
+let QR=buildMaze(mazeText);
+
+const SIZE=29, MOD=10, QX=5, QY=5;
+const CW=SIZE*MOD+10, CH=SIZE*MOD+10;
+const DIRS=[{dr:0,dc:1},{dr:1,dc:0},{dr:0,dc:-1},{dr:-1,dc:0}]; // R D L U
+
+const canvas=document.getElementById('c');
+canvas.width=CW; canvas.height=CH;
+const ctx=canvas.getContext('2d');
+
+let grid=QR.map(r=>[...r]);
+let totalBlack=QR.flat().reduce((a,v)=>a+v,0);
+let cleared=0;
+
+// Snake: head at index 0. Fixed length — never grows.
+let snake=[{r:7,c:4},{r:7,c:3},{r:7,c:2}];
+let dirIdx=0; // 0=R 1=D 2=L 3=U
+
+let trampling=false;
+let apple=null;         // {r,c} — goal
+let startTime=0;        // ms from page load
+let won=false;
+let carveFlash=0;       // ts — brief flash after a pixel is carved
+
+// Randomised direction priority (relative offsets).
+// rel=0 forward, 1 right-turn, 2 u-turn, 3 left-turn.
+// "Curious" movement: bias against long straight runs, never prefer u-turn,
+// shuffle the three useful offsets so it doesn't trace predictable loops.
+let prio=[0,1,3,2];
+let prioCountdown=4;
+let straightRun=0;
+
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+function refreshPrio(){
+  // Occasionally *force* a turn by demoting forward.
+  const useful=shuffle([0,1,3]);
+  const forceTurn=straightRun>=3 || Math.random()<0.28;
+  if(forceTurn){
+    // Put forward last among the useful ones.
+    useful.sort((a,b)=>(a===0)-(b===0));
+    // Small chance of a hard left/right bias to wander sideways.
+    if(Math.random()<0.5) [useful[0],useful[1]]=[useful[1],useful[0]];
+  }
+  prio=[...useful,2]; // u-turn always last resort
+  prioCountdown=2+Math.floor(Math.random()*5);
+}
+
+function isProtected(r,c){
+  return (r<=6&&c<=6)||(r<=6&&c>=22)||(r>=22&&c<=6);
+}
+function inBounds(r,c){return r>=0&&r<SIZE&&c>=0&&c<SIZE;}
+function isBody(r,c){return snake.some(s=>s.r===r&&s.c===c);}
+
+// Derive dirIdx from head→neck direction
+function syncDir(){
+  if(snake.length<2) return;
+  const dr=snake[0].r-snake[1].r, dc=snake[0].c-snake[1].c;
+  const d=DIRS.findIndex(x=>x.dr===dr&&x.dc===dc);
+  if(d!==-1) dirIdx=d;
+}
+
+// ── Forward movement ──────────────────────────────────────────────────────────
+function stepForward(nr,nc){
+  const prevDir=dirIdx;
+  snake.unshift({r:nr,c:nc});
+  snake.pop();
+  dirIdx=DIRS.findIndex(x=>x.dr===(nr-snake[1].r)&&x.dc===(nc-snake[1].c));
+  if(dirIdx===-1) dirIdx=0;
+  straightRun=(dirIdx===prevDir)?straightRun+1:0;
+  prioCountdown--;
+  if(prioCountdown<=0) refreshPrio();
+}
+
+function tryMove(){
+  const h=snake[0];
+  for(const rel of prio){
+    const d=(dirIdx+rel)%4;
+    const nr=h.r+DIRS[d].dr, nc=h.c+DIRS[d].dc;
+    if(!inBounds(nr,nc)||grid[nr][nc]!==0||isBody(nr,nc)) continue;
+    stepForward(nr,nc);
+    return;
+  }
+  // Nowhere to go — u-turn and trample through own body
+  startTrample();
+}
+
+// ── Carve ─────────────────────────────────────────────────────────────────────
+// Player click/tap destroys a QR pixel at that cell, widening the walkable area.
+function carveAt(r,c){
+  if(!inBounds(r,c)) return false;
+  if(grid[r][c]!==1) return false;      // already white, nothing to carve
+  if(isProtected(r,c)) return false;    // finder squares are untouchable
+  grid[r][c]=0;
+  cleared++;
+  carveFlash=performance.now()+220;
+  updateUI();
+  return true;
+}
+
+function pointerToCell(ev){
+  const rect=canvas.getBoundingClientRect();
+  const x=(ev.clientX!==undefined?ev.clientX:ev.touches[0].clientX)-rect.left;
+  const y=(ev.clientY!==undefined?ev.clientY:ev.touches[0].clientY)-rect.top;
+  const cx=x*(canvas.width/rect.width);
+  const cy=y*(canvas.height/rect.height);
+  return {r:Math.floor((cy-QY)/MOD), c:Math.floor((cx-QX)/MOD)};
+}
+
+// ── Trample ───────────────────────────────────────────────────────────────────
+// When blocked by walls with no eat, the snake u-turns 180° and walks forward
+// through its own body (collision disabled) until it either:
+//   (a) finds a perpendicular white non-body cell and turns into it, or
+//   (b) walks out of the body into a fresh white cell on its own.
+function startTrample(){
+  dirIdx=(dirIdx+2)%4;
+  trampling=true;
+  straightRun=0;
+  setStatus('TURNING BACK',false,'back');
+}
+
+function stopTrample(){
+  trampling=false;
+  refreshPrio();
+  straightRun=0;
+  setStatus('NAVIGATING',false);
+}
+
+function doTrampleStep(){
+  const h=snake[0];
+
+  // 1. Perpendicular escape? (left/right turn from current u-turned heading)
+  const perp=[(dirIdx+1)%4,(dirIdx+3)%4];
+  if(Math.random()<0.5) perp.reverse();
+  for(const d of perp){
+    const nr=h.r+DIRS[d].dr, nc=h.c+DIRS[d].dc;
+    if(!inBounds(nr,nc)||grid[nr][nc]!==0||isBody(nr,nc)) continue;
+    dirIdx=d;
+    stepForward(nr,nc);
+    stopTrample();
+    return;
+  }
+
+  // 2. Forward — body overlap is allowed while trampling.
+  const fr=h.r+DIRS[dirIdx].dr, fc=h.c+DIRS[dirIdx].dc;
+  if(inBounds(fr,fc)&&grid[fr][fc]===0){
+    const wasOverlapping=isBody(fr,fc);
+    stepForward(fr,fc);
+    if(!wasOverlapping) stopTrample(); // exited the body into fresh white
+    return;
+  }
+
+  // 3. Totally stuck — try flipping back to the original heading as a last resort.
+  const back=(dirIdx+2)%4;
+  const br=h.r+DIRS[back].dr, bc=h.c+DIRS[back].dc;
+  if(inBounds(br,bc)&&grid[br][bc]===0&&!isBody(br,bc)){
+    dirIdx=back;
+    stepForward(br,bc);
+    stopTrample();
+  }
+  // else pause this tick; next tick will retry.
+}
+
+// ── UI ────────────────────────────────────────────────────────────────────────
+function updateUI(){
+  const pct=Math.max(0,Math.round((1-cleared/totalBlack)*100));
+  document.getElementById('pct').textContent=pct+'%';
+  document.getElementById('v-pct2').textContent=pct+'%';
+  document.getElementById('v-cleared').textContent=cleared;
+  const f=document.getElementById('bar-fill');
+  f.style.width=pct+'%';
+  f.style.background=pct>60?'#5DCAA5':pct>30?'#EF9F27':'#E24B4A';
+}
+
+function fmtTime(ms){return (ms/1000).toFixed(1)+'s';}
+
+function updateTimer(ts){
+  if(won||!startTime) return;
+  document.getElementById('v-time').textContent=fmtTime(ts-startTime);
+}
+
+// ── Apple / Win / Reset ───────────────────────────────────────────────────────
+function placeApple(){
+  for(let tries=0;tries<800;tries++){
+    const r=Math.floor(Math.random()*SIZE);
+    const c=Math.floor(Math.random()*SIZE);
+    if(grid[r][c]!==0||isProtected(r,c)||isBody(r,c)) continue;
+    const d=Math.abs(r-snake[0].r)+Math.abs(c-snake[0].c);
+    if(d<16) continue;
+    apple={r,c};
+    return;
+  }
+  apple={r:SIZE-2,c:SIZE-2};
+}
+
+function checkWin(){
+  if(!apple||won) return;
+  const h=snake[0];
+  if(h.r===apple.r&&h.c===apple.c){
+    won=true;
+    const elapsed=performance.now()-startTime;
+    const pct=Math.max(0,Math.round((1-cleared/totalBlack)*100));
+    document.getElementById('ov-time').textContent=fmtTime(elapsed);
+    document.getElementById('ov-pct').textContent=pct+'%';
+    document.getElementById('ov-cleared').textContent=cleared;
+    document.getElementById('overlay').classList.add('on');
+  }
+}
+
+function resetGame(){
+  grid=QR.map(r=>[...r]);
+  cleared=0;
+  snake=[{r:7,c:4},{r:7,c:3},{r:7,c:2}];
+  dirIdx=0;
+  trampling=false;
+  won=false;
+  straightRun=0;
+  placeApple();
+  startTime=performance.now();
+  document.getElementById('overlay').classList.remove('on');
+  refreshPrio();
+  updateUI();
+  setStatus('NAVIGATING',false);
+}
+
+// Rebuild the maze from a new text and restart the game. Keeps the old
+// maze on encode failure (e.g. overflow past QR v3+L capacity).
+function regenerateMaze(newText){
+  if(!newText) newText=DEFAULT_TEXT;
+  let next;
+  try{ next=buildMaze(newText); }
+  catch(e){
+    setStatus('ENCODE FAIL: '+(e.message||e),true);
+    setTimeout(()=>setStatus('NAVIGATING',false),2400);
+    return;
+  }
+  mazeText=newText;
+  QR=next;
+  totalBlack=QR.flat().reduce((a,v)=>a+v,0);
+  try{
+    const u=new URL(location.href);
+    u.searchParams.set('q',newText);
+    history.replaceState(null,'',u.toString());
+  }catch(e){}
+  resetGame();
+}
+
+function setStatus(txt,warn,cls){
+  const el=document.getElementById('status');
+  el.textContent=txt;
+  el.className=warn?'warn':(cls||'');
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function snakeColor(i,total,tr){
+  const t=1-i/Math.max(total,1);
+  if(tr){
+    // Deep violet / dark purple when backtracking
+    const rv=Math.round(55*t+15*(1-t));
+    const gv=Math.round(10*t+5*(1-t));
+    const bv=Math.round(90*t+30*(1-t));
+    return `rgba(${rv},${gv},${bv},${(0.45+0.5*t).toFixed(2)})`;
+  }
+  const rv=Math.round(127*t+30*(1-t));
+  const gv=Math.round(119*t+10*(1-t));
+  const bv=Math.round(221*t+60*(1-t));
+  return `rgba(${rv},${gv},${bv},${(0.2+0.8*t).toFixed(2)})`;
+}
+
+function render(ts){
+  ctx.clearRect(0,0,CW,CH);
+  ctx.fillStyle='#f5f1e8';
+  ctx.fillRect(QX,QY,SIZE*MOD,SIZE*MOD);
+
+  // QR modules
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+    const px=QX+c*MOD, py=QY+r*MOD;
+    if(grid[r][c]===1){
+      ctx.fillStyle=isProtected(r,c)?'#0d1520':'#12121e';
+      ctx.fillRect(px,py,MOD,MOD);
+    } else if(QR[r][c]===1){
+      ctx.fillStyle='rgba(180,40,40,0.15)';
+      ctx.fillRect(px,py,MOD,MOD);
+    }
+  }
+
+  // Protected zone outlines
+  ctx.strokeStyle='rgba(186,117,23,0.45)';
+  ctx.lineWidth=1;
+  ctx.strokeRect(QX+.5,QY+.5,7*MOD-1,7*MOD-1);
+  ctx.strokeRect(QX+22*MOD+.5,QY+.5,7*MOD-1,7*MOD-1);
+  ctx.strokeRect(QX+.5,QY+22*MOD+.5,7*MOD-1,7*MOD-1);
+
+  // Apple goal — pulsing emoji
+  if(apple){
+    const p=0.5+0.5*Math.sin(ts*0.006);
+    const size=MOD+2+p*1.5;
+    ctx.font=`${size}px system-ui,"Apple Color Emoji","Segoe UI Emoji"`;
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText('\u{1F34F}', QX+apple.c*MOD+MOD/2, QY+apple.r*MOD+MOD/2+0.5);
+  }
+
+  // Carve flash — brief green pulse acknowledging the last click
+  if(ts<carveFlash){
+    const t=(carveFlash-ts)/220;
+    ctx.strokeStyle=`rgba(93,202,165,${(0.55*t).toFixed(2)})`;
+    ctx.lineWidth=1.5;
+    ctx.strokeRect(QX+.5,QY+.5,SIZE*MOD-1,SIZE*MOD-1);
+  }
+
+  // Snake — tail to head so head renders on top.
+  // Trampling draws 2 layers: deep-violet outer glow + core on top.
+  const L=snake.length;
+  if(trampling){
+    for(let i=L-1;i>=0;i--){
+      const seg=snake[i];
+      ctx.fillStyle='rgba(42,8,70,0.85)';
+      ctx.fillRect(QX+seg.c*MOD-1,QY+seg.r*MOD-1,MOD+2,MOD+2);
+    }
+  }
+  for(let i=L-1;i>=0;i--){
+    const seg=snake[i];
+    const isHead=(i===0);
+    const pad=isHead?0:1;
+    ctx.fillStyle=snakeColor(i,L,trampling);
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(QX+seg.c*MOD+pad,QY+seg.r*MOD+pad,MOD-pad*2,MOD-pad*2,isHead?2:1);
+    else ctx.rect(QX+seg.c*MOD+pad,QY+seg.r*MOD+pad,MOD-pad*2,MOD-pad*2);
+    ctx.fill();
+  }
+
+  // Head eye
+  const h=snake[0];
+  ctx.fillStyle='rgba(255,255,255,0.85)';
+  ctx.beginPath();
+  ctx.arc(
+    QX+h.c*MOD+MOD/2+DIRS[dirIdx].dc*2.5,
+    QY+h.r*MOD+MOD/2+DIRS[dirIdx].dr*2.5,
+    1.4,0,Math.PI*2
+  );
+  ctx.fill();
+}
+
+// ── Loop ──────────────────────────────────────────────────────────────────────
+const STEP_MS=115;
+let lastStep=0;
+
+function loop(ts){
+  if(!won&&ts-lastStep>STEP_MS){
+    if(trampling) doTrampleStep();
+    else tryMove();
+    checkWin();
+    lastStep=ts;
+  }
+
+  updateTimer(ts);
+  render(ts);
+  requestAnimationFrame(loop);
+}
+
+function handleCarve(ev){
+  if(won) return;
+  const {r,c}=pointerToCell(ev);
+  carveAt(r,c);
+}
+
+canvas.addEventListener('mousedown',handleCarve);
+canvas.addEventListener('touchstart',e=>{e.preventDefault();handleCarve(e);},{passive:false});
+document.getElementById('ov-btn').addEventListener('click',resetGame);
+
+const mazeTextEl=document.getElementById('maze-text');
+mazeTextEl.value=mazeText;
+document.getElementById('maze-go').addEventListener('click',()=>regenerateMaze(mazeTextEl.value));
+mazeTextEl.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();regenerateMaze(mazeTextEl.value);}
+});
+
+document.getElementById('share').addEventListener('click',async()=>{
+  const btn=document.getElementById('share');
+  try{
+    await navigator.clipboard.writeText(location.href);
+    const prev=btn.textContent;
+    btn.textContent='[ copied! ]';
+    btn.classList.add('copied');
+    setTimeout(()=>{btn.textContent=prev;btn.classList.remove('copied');},1400);
+  }catch(e){
+    btn.textContent='[ failed ]';
+    setTimeout(()=>{btn.textContent='[ deep link ]';},1400);
+  }
+});
+
+// ── QR export (original maze, not the partially carved version) ────────────
+function exportQR(format){
+  const px=parseInt(document.getElementById('export-size').value)||512;
+  const n=QR.length;
+  const quiet=4;
+  const mod=Math.floor(px/(n+quiet*2));
+  const total=(n+quiet*2)*mod;
+  if(format==='svg'){
+    let paths='';
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+      if(QR[r][c]) paths+='M'+((c+quiet)*mod)+' '+((r+quiet)*mod)+'h'+mod+'v'+mod+'h-'+mod+'z';
+    }
+    const svg='<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+total+' '+total+'" width="'+total+'" height="'+total+'"><rect width="'+total+'" height="'+total+'" fill="#fff"/><path d="'+paths+'" fill="#000"/></svg>';
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
+    a.download='qr-'+total+'px.svg';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } else {
+    const cv=document.createElement('canvas');
+    cv.width=total; cv.height=total;
+    const cx=cv.getContext('2d');
+    cx.fillStyle='#fff'; cx.fillRect(0,0,total,total);
+    cx.fillStyle='#000';
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+      if(QR[r][c]) cx.fillRect((c+quiet)*mod,(r+quiet)*mod,mod,mod);
+    }
+    cv.toBlob(b=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(b);
+      a.download='qr-'+total+'px.png';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    },'image/png');
+  }
+}
+document.getElementById('dl-svg').addEventListener('click',()=>exportQR('svg'));
+document.getElementById('dl-png').addEventListener('click',()=>exportQR('png'));
+
+canvas.focus();
+resetGame();
+requestAnimationFrame(ts=>{lastStep=ts;loop(ts);});
+</script>
+</body>
+</html>

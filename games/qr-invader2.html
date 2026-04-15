@@ -1,0 +1,1675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>QR Invader v2 — Crumble</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#fff;font-family:system-ui,sans-serif;display:flex;justify-content:center;padding:8px 6px 12px;min-height:100vh}
+#wrap{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;max-width:640px}
+
+/* top bar: back + readability + scan + share in one row */
+#topbar{display:flex;align-items:center;gap:6px;width:100%;flex-wrap:wrap;padding:0 2px}
+#back{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#888;text-decoration:none;padding:4px 8px;border:1px solid #ddd;border-radius:3px;background:#fff;transition:color .15s,border-color .15s;white-space:nowrap}
+#back:hover{color:#1D9E75;border-color:#1D9E75}
+#read-status{flex:1;font-family:'Press Start 2P',ui-monospace,monospace;font-size:8px;color:#888;line-height:1.45;min-width:0}
+#read-status .val{color:#1D9E75}
+#read-status .unknown{color:#BA7517}
+#read-status .fail{color:#A32D2D}
+#read-status .stale{color:#888;font-family:ui-monospace,Menlo,monospace;font-size:9px;display:block;margin-top:1px}
+#scan-btn{background:transparent;color:#1D9E75;border:1px solid #1D9E75;font-family:'Press Start 2P',ui-monospace,monospace;font-size:8px;padding:4px 10px;border-radius:3px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .15s;white-space:nowrap}
+#scan-btn:hover{background:#1D9E75;color:#fff}
+#share{font-family:inherit;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#888;padding:4px 8px;border:1px solid #ddd;border-radius:3px;background:#fff;cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap}
+#share:hover,#share.copied{color:#1D9E75;border-color:#1D9E75}
+
+#term-msg{font-family:'Press Start 2P',ui-monospace,monospace;font-size:7px;color:#5DCAA5;margin-top:4px;line-height:1.4;min-height:0;transition:color .3s}
+/* status: small line inside terminal, bottom-right */
+#status{font-family:'Press Start 2P',ui-monospace,monospace;font-size:7px;color:rgba(29,158,117,0.55);text-align:right;margin-top:4px;letter-spacing:.03em;line-height:1.3;transition:color .3s}
+
+/* terminal */
+#term{font-family:ui-monospace,Menlo,'SF Mono',Consolas,monospace;font-size:11px;background:#0b0b0e;color:#ccc;padding:5px 10px 8px;border-radius:4px;border:1px solid #1e1e24;width:100%;max-width:600px;text-align:left;overflow:hidden;box-shadow:inset 0 0 10px rgba(0,0,0,0.45)}
+#term-line{white-space:nowrap;overflow:hidden;text-overflow:clip}
+#term .tp{color:#5DCAA5}
+#term .td{color:#8aa0b8}
+#term .tc{color:#666}
+#term-cmd{color:#7F77DD;transition:color .35s}
+#term-cur{display:inline-block;width:6px;color:#ccc;margin-left:1px;animation:blink 1s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+#term-braille{font-family:ui-monospace,Menlo,'SF Mono',Consolas,monospace;font-size:16px;line-height:1.05;white-space:pre;margin-top:3px;color:#7F77DD;transition:color .35s;letter-spacing:.04em;min-height:34px}
+
+/* canvas */
+canvas{display:block;max-width:100%;height:auto}
+
+/* bottom row: stats + aggro side by side */
+#bottom-row{display:flex;align-items:center;gap:10px;width:100%;justify-content:center;flex-wrap:wrap}
+#stats{display:flex;gap:8px}
+.sc{background:#f5f5f5;border-radius:6px;padding:4px 10px;text-align:center}
+.sc-l{font-size:9px;color:#888}
+.sc-v{font-size:14px;font-weight:500;color:#111}
+#aggro-wrap{display:flex;align-items:center;gap:6px;flex:1;max-width:260px}
+#aggro-lbl{font-family:'Press Start 2P',ui-monospace,monospace;font-size:8px;color:#888;white-space:nowrap}
+#aggro-pct{font-family:'Press Start 2P',ui-monospace,monospace;color:#aaa;min-width:32px;text-align:right;font-size:8px;transition:color .15s}
+.block-track{display:flex;gap:1px;cursor:pointer;height:10px;flex:1;min-width:60px;touch-action:none}
+.block-track .blk{flex:1;background:#e0e0e0;height:100%;transition:background .06s}
+.block-track .blk.on{background:#7F77DD}
+.block-track .blk.on.tip{filter:brightness(1.3)}
+
+/* controls row: maze input + export */
+#controls{display:flex;gap:4px;width:100%;max-width:600px;align-items:center;flex-wrap:wrap}
+#maze-text{flex:1;min-width:120px;background:#fff;border:1px solid #ddd;color:#333;font-family:ui-monospace,Menlo,monospace;font-size:11px;padding:5px 8px;border-radius:3px;outline:none}
+#maze-text:focus{border-color:#1D9E75}
+#maze-go,#export-size,.exp-btn{font-family:ui-monospace,Menlo,monospace;font-size:10px;padding:5px 8px;border-radius:3px;border:1px solid #ddd;background:#fff;cursor:pointer;transition:all .15s}
+#maze-go{color:#1D9E75;letter-spacing:.08em;text-transform:uppercase}
+#maze-go:hover{background:#1D9E75;color:#fff;border-color:#1D9E75}
+#export-size{color:#333;-webkit-appearance:none;appearance:none}
+.exp-btn{color:#888;text-align:center;letter-spacing:.08em;text-transform:uppercase}
+.exp-btn:hover{color:#1D9E75;border-color:#1D9E75}
+#hint{font-size:9px;color:#bbb;text-align:center}
+#scan-modal{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:none;align-items:center;justify-content:center;z-index:20;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+#scan-modal.on{display:flex}
+#scan-card{background:#fff;border-radius:8px;padding:14px 16px;max-width:620px;width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,0.4);font-family:system-ui,sans-serif;color:#222;position:relative}
+#scan-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+#scan-header h3{font-family:'Press Start 2P',ui-monospace,monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#1D9E75;margin:0;white-space:nowrap}
+#scan-decode{font-family:ui-monospace,Menlo,monospace;font-size:12px;flex:1;word-break:break-all;min-width:0}
+#scan-decode .ok{color:#1D9E75}
+#scan-decode .bad{color:#A32D2D}
+#scan-close{position:absolute;top:10px;right:10px;background:none;border:none;font-size:18px;color:#aaa;cursor:pointer;padding:2px 6px;line-height:1;transition:color .15s}
+#scan-close:hover{color:#E24B4A}
+#scan-table{width:100%;border-collapse:collapse;font-family:ui-monospace,Menlo,monospace;font-size:11px;margin-bottom:8px}
+#scan-table th,#scan-table td{padding:4px 6px;text-align:center;border-bottom:1px solid #eee}
+#scan-table th{color:#888;font-weight:normal;font-size:10px;text-transform:uppercase;letter-spacing:.06em;cursor:help;position:relative}
+#scan-table th:first-child{text-align:left;cursor:default}
+#scan-table td:first-child{text-align:left;font-weight:500}
+tr.delta td{color:#A32D2D;font-size:10px}
+#scan-table th .tip{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#222;color:#eee;font-family:system-ui,sans-serif;font-size:11px;font-weight:normal;letter-spacing:0;text-transform:none;padding:8px 12px;border-radius:4px;width:220px;text-align:left;line-height:1.45;z-index:30;box-shadow:0 4px 14px rgba(0,0,0,0.3);pointer-events:none;white-space:normal}
+#scan-table th:hover .tip{display:block}
+/* old heatmap removed — data placement map replaces it */
+#charmap-container{position:relative}
+#charmap{display:flex;flex-wrap:wrap;gap:2px;margin-bottom:6px;justify-content:center}
+.char-box{display:inline-flex;align-items:center;justify-content:center;width:18px;height:22px;border:1px solid #d0d0d8;border-radius:2px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#444;cursor:pointer;transition:all .12s;user-select:none;background:#fafafa}
+.char-box:hover{border-color:#2196f3;background:#e3f2fd}
+.char-box.on{background:#1565c0;color:#fff;border-color:#0d47a1}
+.char-box.head{background:#EF9F27;color:#fff;border-color:#e65100;cursor:default;font-size:9px}
+#connect-lines{position:absolute;top:0;left:0;pointer-events:none;z-index:5}
+#datamap{image-rendering:pixelated;border:1px solid #ddd;border-radius:4px;display:block;cursor:crosshair}
+#datamap-wrap{-webkit-overflow-scrolling:touch;position:relative}
+#datamap-tip{position:fixed;background:#1a1a22;color:#ddd;font-family:ui-monospace,Menlo,monospace;font-size:11px;padding:10px 14px;border-radius:5px;max-width:300px;line-height:1.55;z-index:35;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,0.45);display:none;word-break:break-word}
+#datamap-tip.on{display:block}
+#datamap-tip .lbl{color:#5DCAA5;font-weight:bold;font-size:12px;margin-bottom:4px;display:block}
+#datamap-tip .desc{color:#aaa;font-size:10px;line-height:1.5;margin-bottom:5px}
+#datamap-tip .bits{color:#90caf9;font-size:10px;font-family:ui-monospace,monospace}
+#datamap-tip .ecc-bits{color:#ffcc80}
+#datamap-tip .destroyed-tag{color:#E24B4A;font-weight:bold;font-size:10px;display:block;margin-top:4px}
+#scan-close{background:transparent;color:#888;border:1px solid #ddd;font-family:ui-monospace,Menlo,monospace;font-size:11px;padding:8px 22px;border-radius:4px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;transition:all .15s;display:block;margin:0 auto}
+#scan-close:hover{color:#1D9E75;border-color:#1D9E75}
+/* these old rules are replaced by #controls in the new layout */
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="topbar">
+    <a id="back" href="../index.html">&larr; back</a>
+    <div id="read-status"><span class="unknown">QR READABILITY: UNKNOWN</span><span class="stale">must scan to verify</span></div>
+    <button id="scan-btn" type="button">scan</button>
+    <button id="share" type="button">link</button>
+  </div>
+  <div id="term">
+    <div id="term-line"><span class="tp">emotions@qr-invader</span><span class="td">:~</span><span class="tc">$ show </span><span id="term-cmd">determined</span><span id="term-cur">_</span></div>
+    <div id="term-braille">&#10240;&#10240;&#10240;&#10240;
+&#10240;&#10240;&#10240;&#10240;</div>
+    <div id="term-msg"></div>
+    <div id="status">read the code before it is too late</div>
+  </div>
+  <canvas id="c"></canvas>
+  <div id="bottom-row">
+    <div id="stats">
+      <div class="sc"><div class="sc-l">hit</div><div class="sc-v" id="v-hits">0</div></div>
+      <div class="sc"><div class="sc-l">fired</div><div class="sc-v" id="v-shots">0</div></div>
+    </div>
+    <div id="aggro-wrap">
+      <span id="aggro-lbl">aggro</span>
+      <div class="block-track" id="aggro-track"></div>
+      <span id="aggro-pct">50%</span>
+    </div>
+  </div>
+  <div id="hint">autonomous demo</div>
+  <div id="scan-modal">
+    <div id="scan-card">
+      <button id="scan-close" type="button">&times;</button>
+      <div id="scan-header"><h3>Scan</h3><span id="scan-decode"></span></div>
+      <table id="scan-table"><thead><tr><th></th><th>Rule 1<span class="tip">+3 for each row/column with 5+ consecutive same-color modules, +1 per extra. Penalizes long horizontal/vertical streaks.</span></th><th>Rule 2<span class="tip">+3 for every 2×2 block of the same color. Counts overlapping blocks. Penalizes large monochrome patches.</span></th><th>Rule 3<span class="tip">+40 for each finder-like pattern (1:1:3:1:1) followed or preceded by 4 light modules. Prevents false detection locks.</span></th><th>Rule 4<span class="tip">+10 × floor(|%dark − 50| / 5). Penalizes imbalanced dark/light ratios across the matrix.</span></th><th>Total</th></tr></thead><tbody id="scan-tbody"></tbody></table>
+      <p style="font-size:10px;color:#888;margin:6px 0 4px;line-height:1.4">Click a letter → see its bits. <b style="color:#2196f3">D</b>=data <b style="color:#ff9800">E</b>=ECC</p>
+      <div id="charmap-container">
+        <div id="charmap"></div>
+        <div id="datamap-wrap" style="overflow-x:auto;margin-bottom:18px">
+          <canvas id="datamap"></canvas>
+        </div>
+        <canvas id="connect-lines"></canvas>
+        <div id="datamap-tip"></div>
+      </div>
+      <!-- close button is now the × in scan-card top-right -->
+    </div>
+  </div>
+  <div id="controls">
+    <input id="maze-text" type="text" placeholder="maze text / url" spellcheck="false" autocomplete="off">
+    <button id="maze-go" type="button">regen</button>
+    <select id="export-size">
+      <option value="256">256</option>
+      <option value="512" selected>512</option>
+      <option value="1024">1024</option>
+      <option value="2048">2048</option>
+    </select>
+    <button class="exp-btn" id="dl-svg" type="button">svg</button>
+    <button class="exp-btn" id="dl-png" type="button">png</button>
+  </div>
+</div>
+<script src="qr-lab/vendor/qrcode-gen.js"></script>
+<script src="qr-lab/vendor/jsQR.js"></script>
+<script>
+// Maze is generated at boot from the input text (or ?q= query param).
+// Pinned to QR v3 (29×29) with ECC L so the canvas geometry stays locked.
+const DEFAULT_TEXT='https://www.grapplingprimitives.com';
+function buildMaze(text){
+  const qr=qrcode(3,'L');
+  qr.addData(text);
+  qr.make();
+  const n=qr.getModuleCount();
+  const m=[];
+  for(let r=0;r<n;r++){
+    const row=[];
+    for(let c=0;c<n;c++) row.push(qr.isDark(r,c)?1:0);
+    m.push(row);
+  }
+  return m;
+}
+let mazeText=new URLSearchParams(location.search).get('q')||DEFAULT_TEXT;
+let QR=buildMaze(mazeText);
+
+const SIZE=29, MOD=20;                // QR cell is 2x larger than before
+const QX=10, QY=30;                   // minimal headroom — just enough for the intro to land
+const CW=SIZE*MOD+20, CH=SIZE*MOD+QY+10;
+const DIRS=[[0,1],[1,0],[0,-1],[-1,0]]; // R D L U
+
+const canvas=document.getElementById('c');
+canvas.width=CW; canvas.height=CH;
+const ctx=canvas.getContext('2d');
+
+let alive=QR.map(r=>[...r]);
+let totalBlack=QR.flat().reduce((a,v)=>a+v,0);
+let hits=0, shots=0;
+
+// Debris: when a module is destroyed it crumbles into scattered pixel remnants.
+// ~20% of the module's pixel area persists as 1px dots, spilling ±3px beyond
+// the cell edges. Stored per-cell as arrays of {dx,dy} offsets.
+let debris=Array.from({length:SIZE},()=>Array.from({length:SIZE},()=>[]));
+const DEBRIS_PCT=0.20;
+const DEBRIS_SPILL=3; // px of overflow beyond module edge
+
+function crumbleModule(row,col){
+  alive[row][col]=0;
+  const count=Math.round(MOD*MOD*DEBRIS_PCT);
+  const spread=MOD+DEBRIS_SPILL*2;
+  const d=[];
+  for(let i=0;i<count;i++){
+    d.push({
+      dx:Math.floor(Math.random()*spread)-DEBRIS_SPILL,
+      dy:Math.floor(Math.random()*spread)-DEBRIS_SPILL
+    });
+  }
+  debris[row][col]=d;
+}
+
+let invR, invC, invFromR, invFromC;
+let moveStart=0;
+const STEP_MS=260;
+let lastStep=0;
+
+// ── Aggro factor (0..1) — drives all timing parameters ─────────────────────
+let aggroFactor=0.50;
+function lerp(a,b,t){return a+(b-a)*t;}
+function getCalmMin(){return lerp(10000,2000,aggroFactor);}
+function getCalmMax(){return lerp(15000,4000,aggroFactor);}
+function getFrustratedMs(){return lerp(1500,350,aggroFactor);}
+function getShotsPerBurst(){return Math.max(1,Math.floor(lerp(1,6,aggroFactor)));}
+const RED_MS=450;
+const DARK_RED_MS=450;
+const GLEE_MS=2000;
+
+// Rage state
+let anger=0;
+const ANGER_MAX=4;
+let rageStart=0;
+let nextRageAt=0;
+let gleeUntil=0;
+
+// Rage-burst shooting (fires getShotsPerBurst shots in quick succession)
+let burstRemaining=0;
+let burstNextAt=0;
+
+function scheduleNextRage(now){
+  const mn=getCalmMin(), mx=getCalmMax();
+  nextRageAt=now+mn+Math.random()*(mx-mn);
+}
+
+let bullets=[], particles=[];
+
+// Landing burst: 2 quick shots right after the intro descent, then glee + calm.
+let landingShots=0;
+let landingShotNext=0;
+
+// ── Visited grid — biases the invader toward unexplored white cells ────────
+let visited=Array.from({length:SIZE},()=>Array(SIZE).fill(false));
+
+// Intro animation — flies in from off-frame, hovers huge in center, spirals down.
+let intro=true;
+let introStart=0;
+const INTRO_MS=4000;
+
+// Relocate: when stuck with no walkable neighbors, fly up and reland elsewhere.
+let relocating=false;
+let relocateStart=0;
+let relocateFromR=0, relocateFromC=0;
+const RELOCATE_MS=1400; // 0.7s fly up + 0.7s descend
+
+function isProtected(r,c){
+  return (r<=6&&c<=6)||(r<=6&&c>=22)||(r>=22&&c<=6);
+}
+
+function placeInvader(){
+  for(let t=0;t<800;t++){
+    const r=Math.floor(Math.random()*SIZE);
+    const c=Math.floor(Math.random()*SIZE);
+    if(alive[r][c]===0 && !isProtected(r,c)){
+      invR=invFromR=r; invC=invFromC=c;
+      return;
+    }
+  }
+  invR=invFromR=14; invC=invFromC=14;
+}
+
+function cellCenter(r,c){
+  return {x:QX+c*MOD+MOD/2, y:QY+r*MOD+MOD/2};
+}
+
+function startRelocate(){
+  relocateFromR=invR; relocateFromC=invC;
+  placeInvader(); // picks a new valid white cell
+  relocating=true;
+  relocateStart=performance.now();
+}
+
+function renderRelocate(ts){
+  const prog=Math.min(1,(ts-relocateStart)/RELOCATE_MS);
+  const from=cellCenter(relocateFromR,relocateFromC);
+  const to=cellCenter(invR,invC);
+  const topY=QY-20; // fly above the QR
+
+  let x,y,s;
+  if(prog<0.5){
+    // Fly up from old position, shrinking
+    const t=prog/0.5;
+    const ease=t*t; // ease-in: accelerating upward
+    x=from.x;
+    y=from.y+(topY-from.y)*ease;
+    s=Math.max(1,Math.round(1+(3-1)*ease)); // 1→3 (grows as it "approaches camera")
+  } else {
+    // Descend to new position, shrinking back
+    const t=(prog-0.5)/0.5;
+    const ease=1-Math.pow(1-t,2); // ease-out: decelerating landing
+    x=from.x+(to.x-from.x)*ease;
+    y=topY+(to.y-topY)*ease;
+    s=Math.max(1,Math.round(3-(3-1)*ease)); // 3→1
+  }
+  drawIntroInvader(x,y,s,6+s*2);
+}
+
+function tick(){
+  // Freeze in place while raging or bursting.
+  if(rageStart>0||burstRemaining>0) return;
+
+  // Collect walkable neighbors; prefer unvisited cells for exploration.
+  const cands=[];
+  for(let d=0;d<4;d++){
+    const nr=invR+DIRS[d][0], nc=invC+DIRS[d][1];
+    if(nr<0||nr>=SIZE||nc<0||nc>=SIZE||alive[nr][nc]===1) continue;
+    cands.push({d,nr,nc,v:visited[nr][nc]});
+  }
+  if(cands.length===0){ startRelocate(); return; }
+
+  const unvis=cands.filter(c=>!c.v);
+  const pool=unvis.length>0?unvis:cands;
+  const pick=pool[Math.floor(Math.random()*pool.length)];
+
+  visited[invR][invC]=true;
+  invFromR=invR; invFromC=invC;
+  invR=pick.nr; invC=pick.nc;
+  moveStart=performance.now();
+}
+
+function fireRandom(){
+  shots++;
+  document.getElementById('v-shots').textContent=shots;
+  const d=Math.floor(Math.random()*4);
+  const c0=cellCenter(invR,invC);
+  bullets.push({
+    x:c0.x, y:c0.y,
+    vx:DIRS[d][1]*5, vy:DIRS[d][0]*5,
+    life:140
+  });
+}
+
+function spawnParticles(px,py,warm){
+  const n=warm?12:6;
+  for(let i=0;i<n;i++) particles.push({
+    x:px, y:py,
+    vx:(Math.random()-.5)*5,
+    vy:(Math.random()-.5)*5,
+    life:1,
+    col:Math.random()>.5?'#E24B4A':'#EF9F27'
+  });
+}
+
+// Track destruction since last scan
+let destroyedAtLastScan=0;
+let lastScanReadable=null; // null = never scanned, true/false after
+let lastScanPct=null;
+
+function countDestroyed(){
+  let d=0;
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++)
+    if(QR[r][c]===1&&alive[r][c]===0) d++;
+  return d;
+}
+
+function updateMeter(){
+  const destroyed=countDestroyed();
+  document.getElementById('v-hits').textContent=hits;
+  const sinceScan=destroyed-destroyedAtLastScan;
+  const el=document.getElementById('read-status');
+
+  if(lastScanReadable===null){
+    // Never scanned
+    el.innerHTML='<span class="unknown">QR READABILITY: UNKNOWN</span>'+
+      '<span class="stale">must scan to verify</span>';
+  } else {
+    const tag=lastScanReadable
+      ?'<span class="val">READABLE ('+lastScanPct+'%)</span>'
+      :'<span class="fail">UNREADABLE</span>';
+    const stale=sinceScan>0
+      ?'<span class="stale">'+sinceScan+' module'+(sinceScan>1?'s':'')+' destroyed since last scan — status unknown</span>'
+      :'<span class="stale">up to date</span>';
+    el.innerHTML='QR READABILITY: '+tag+stale;
+  }
+}
+
+function drawQR(){
+  ctx.fillStyle='#fff';
+  ctx.fillRect(QX-2,QY-2,SIZE*MOD+4,SIZE*MOD+4);
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+    const px=QX+c*MOD, py=QY+r*MOD;
+    if(alive[r][c]===1){
+      if(mvpMode){
+        // Indestructible = pure black; expendable = dark burgundy
+        const key=r+','+c;
+        ctx.fillStyle=mvpExpendable.has(key)?'#3a0a0f':'#000000';
+      } else {
+        ctx.fillStyle=isProtected(r,c)?'#0a0a0a':'#1a1a1a';
+      }
+      ctx.fillRect(px,py,MOD,MOD);
+    } else if(debris[r][c].length>0){
+      ctx.fillStyle='rgba(26,26,26,0.75)';
+      for(const {dx,dy} of debris[r][c]){
+        ctx.fillRect(px+dx,py+dy,1,1);
+      }
+    }
+  }
+}
+
+// 14 x 8 pixel-perfect invader silhouette
+const SPRITE=[
+  [0,0,1,0,0,0,0,0,0,0,0,1,0,0],
+  [0,0,0,1,0,0,0,0,0,0,1,0,0,0],
+  [0,0,1,1,1,1,1,1,1,1,1,1,0,0],
+  [0,1,1,0,1,1,1,1,1,1,0,1,1,0],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,1,1,1,1,1,1,1,1,1,1,0,1],
+  [1,0,1,0,0,0,0,0,0,0,0,1,0,1],
+  [0,0,0,1,1,0,0,0,0,1,1,0,0,0]
+];
+
+function currentEmotion(ts){
+  // Post-fire satisfaction briefly overrides everything else
+  if(gleeUntil>ts) return {name:'glee', core:'#3ACBB8', glow:'rgba(58,203,184,0.95)'};
+  const a=Math.min(3, Math.floor(anger));
+  if(a===0) return {name:'determined', core:'#7F77DD', glow:null};
+  if(a===1) return {name:'frustrated', core:'#EF9F27', glow:'rgba(239,159,39,0.95)'};
+  if(a===2) return {name:'angry',      core:'#E24B4A', glow:'rgba(226,75,74,0.95)'};
+  return       {name:'angry',      core:'#8B0000', glow:'rgba(139,0,0,0.95)'};
+}
+
+let lastEmotionName='';
+const TERM_COLORS={
+  determined:'#7F77DD',
+  frustrated:'#EF9F27',
+  angry:'#E24B4A',
+  glee:'#3ACBB8'
+};
+// 4x2 braille faces. Blank cells (\u2800) keep every row 4 wide so
+// the terminal block stays a stable size across transitions.
+const BRAILLE_FACES={
+  determined:'\u2824\u2844\u28A0\u2824\n\u2800\u2820\u2804\u2800',
+  frustrated:'\u2820\u2844\u28A0\u2804\n\u2820\u2824\u2824\u2804',
+  angry:     '\u2822\u2840\u2880\u2814\n\u2800\u2824\u2824\u2800',
+  glee:      '\u28A8\u2845\u28A8\u2845\n\u2822\u28C0\u28C0\u2814'
+};
+function setTerminalEmotion(name){
+  if(name===lastEmotionName) return;
+  lastEmotionName=name;
+  const color=TERM_COLORS[name]||'#ccc';
+  const cmd=document.getElementById('term-cmd');
+  cmd.textContent=name;
+  cmd.style.color=color;
+  const br=document.getElementById('term-braille');
+  br.textContent=BRAILLE_FACES[name]||BRAILLE_FACES.determined;
+  br.style.color=color;
+}
+
+function drawInvader(x,y,ts){
+  const s=1;                            // 1 screen pixel per sprite pixel — final 14x8 inside MOD=20
+  const pw=SPRITE[0].length*s, ph=SPRITE.length*s;
+  const style=currentEmotion(ts);
+  setTerminalEmotion(style.name);
+  ctx.save();
+  if(style.glow){
+    ctx.shadowColor=style.glow;
+    // Glee pulses gently; rage uses anger magnitude
+    ctx.shadowBlur=style.name==='glee' ? 6+Math.sin(ts*0.02)*2 : 5+anger*3;
+  }
+  ctx.fillStyle=style.core;
+  SPRITE.forEach((row,ri)=>row.forEach((v,ci)=>{
+    if(v) ctx.fillRect(Math.round(x-pw/2+ci*s), Math.round(y-ph/2+ri*s), s, s);
+  }));
+  ctx.restore();
+}
+
+function drawIntroInvader(x,y,s,glowBlur){
+  const pw=SPRITE[0].length*s, ph=SPRITE.length*s;
+  ctx.save();
+  ctx.shadowColor='rgba(127,119,221,0.9)';
+  ctx.shadowBlur=glowBlur;
+  ctx.fillStyle='#7F77DD';
+  SPRITE.forEach((row,ri)=>row.forEach((v,ci)=>{
+    if(v) ctx.fillRect(Math.round(x-pw/2+ci*s), Math.round(y-ph/2+ri*s), s, s);
+  }));
+  ctx.restore();
+  return {pw,ph};
+}
+
+function renderIntro(ts,prog){
+  // Three phases over 4 s:
+  //   P1 (0 → 0.30): straight-at-viewer zoom, dead-center, tiny → huge
+  //   P2 (0.30 → 0.55): 1 s hover dead-center at MAX_SCALE
+  //   P3 (0.55 → 1.0): spiral descent into the maze cell
+  const P1=0.30;
+  const P2=0.55;
+  const end=cellCenter(invR,invC);
+  const centerX=CW/2;
+  const centerY=CH/2;
+  const MAX_SCALE=16;          // 14x8 sprite → 224x128 at peak ("in your face")
+
+  let x,y,s,glowBlur;
+
+  if(prog<P1){
+    // Enter from above the frame, diving straight toward the viewer
+    const t=prog/P1;
+    const ease=t*t;                           // ease-in: accelerating approach
+    const startX=centerX, startY=-140;
+    x=startX+(centerX-startX)*ease;
+    y=startY+(centerY-startY)*ease;
+    const scaleF=1+(MAX_SCALE-1)*ease;        // 1 → 16
+    s=Math.max(1,Math.round(scaleF));
+    glowBlur=4+ease*40;
+  } else if(prog<P2){
+    // Hold huge dead-center for ~1 s, bob + pulsing halo
+    const bob=Math.sin(ts*0.007)*4;
+    x=centerX;
+    y=centerY+bob;
+    s=MAX_SCALE;
+    glowBlur=42+Math.sin(ts*0.013)*8;
+  } else {
+    // Spiral descent from center to the spawn cell, shrinking 16 → 1
+    const t=(prog-P2)/(1-P2);
+    const ease=t*t;                           // ease-in: accelerating dive
+    const baseX=centerX+(end.x-centerX)*ease;
+    const baseY=centerY+(end.y-centerY)*ease;
+    const turns=2.5;
+    const spiralR=110*(1-ease);
+    const angle=t*turns*Math.PI*2;
+    x=baseX+Math.cos(angle)*spiralR;
+    y=baseY+Math.sin(angle)*spiralR;
+    const scaleF=MAX_SCALE-(MAX_SCALE-1)*ease;// 16 → 1
+    s=Math.max(1,Math.round(scaleF));
+    glowBlur=42-ease*38;
+  }
+
+  const {pw,ph}=drawIntroInvader(x,y,s,glowBlur);
+
+  // Engine trail throughout the intro
+  if(Math.random()<0.55 && prog<0.95){
+    particles.push({
+      x:x+(Math.random()-0.5)*pw*0.55,
+      y:y+ph/2,
+      vx:(Math.random()-0.5)*0.8,
+      vy:0.6+Math.random()*1.8,
+      life:0.9,
+      col:Math.random()>0.5?'#7F77DD':'#534AB7'
+    });
+  }
+}
+
+function loop(ts){
+  if(!introStart) introStart=ts;
+  const introProg=Math.min(1,(ts-introStart)/INTRO_MS);
+  if(intro && introProg>=1){
+    intro=false;
+    moveStart=ts;
+    lastStep=ts;
+    // Landing burst: invader arrives angry and fires twice before calming.
+    landingShots=2;
+    landingShotNext=ts+350;
+    anger=2.5;
+  }
+
+  // Relocate: check completion
+  if(relocating&&ts-relocateStart>=RELOCATE_MS){
+    relocating=false;
+    moveStart=ts; invFromR=invR; invFromC=invC;
+    lastStep=ts;
+  }
+
+  if(!intro&&!relocating){
+    if(!lastStep) lastStep=ts;
+    // Auto-start MVP after landing glee fades
+    if(pendingMVPStart&&ts>gleeUntil){
+      pendingMVPStart=false;
+      startMVPAuto();
+    }
+    const stepMs=mvpMode?Math.round(STEP_MS/MVP_STEP_FACTOR):STEP_MS;
+    if(ts-lastStep>=stepMs){
+      if(mvpMode&&!mvpDone) tickMVP(); else if(!mvpMode) tick();
+      lastStep=ts;
+    }
+    // MVP targeted fire
+    if(mvpMode&&!mvpDone&&ts>=mvpFireNext){
+      const tgt=findNearestExpendableAlive();
+      if(tgt){fireAtTarget(tgt);mvpFireNext=ts+MVP_FIRE_INTERVAL;}
+      anger=2.2+(Math.sin(ts*0.008)*0.5);
+    }
+
+    // Landing burst: fire 2 quick shots right after touchdown.
+    if(landingShots>0){
+      anger=2.5;
+      if(ts>=landingShotNext){
+        fireRandom();
+        landingShots--;
+        if(landingShots>0){
+          landingShotNext=ts+500;
+        } else {
+          anger=0;
+          gleeUntil=ts+GLEE_MS;
+          pendingMVPStart=true; // start MVP after glee fades
+        }
+      }
+    }
+
+    // Rage-burst firing (multi-shot, count driven by aggro slider).
+    else if(burstRemaining>0){
+      anger=3.2; // hold at dark red during burst
+      if(ts>=burstNextAt){
+        fireRandom();
+        burstRemaining--;
+        if(burstRemaining>0){
+          burstNextAt=ts+200;
+        } else {
+          anger=0;
+          rageStart=0;
+          gleeUntil=ts+GLEE_MS;
+          scheduleNextRage(ts);
+        }
+      }
+    }
+
+    // Rage state machine — timer-driven, speeds up with aggro.
+    else if(rageStart===0){
+      anger=0;
+      if(ts>=nextRageAt) rageStart=ts;
+    } else {
+      const fMs=getFrustratedMs();
+      const e=ts-rageStart;
+      const redAt=fMs;
+      const darkAt=fMs+RED_MS;
+      const fireAt=fMs+RED_MS+DARK_RED_MS;
+      if(e<redAt)         anger=1.2;
+      else if(e<darkAt)   anger=2.2;
+      else if(e<fireAt)   anger=3.2;
+      else {
+        // Transition to burst firing instead of single shot.
+        burstRemaining=getShotsPerBurst();
+        burstNextAt=ts;
+      }
+    }
+  }
+
+  ctx.clearRect(0,0,CW,CH);
+  drawQR();
+
+  if(intro){
+    renderIntro(ts,introProg);
+  } else if(relocating){
+    renderRelocate(ts);
+  } else {
+    // Lerp invader position toward current cell
+    const prog=Math.min(1,(ts-moveStart)/STEP_MS);
+    const rr=invFromR+(invR-invFromR)*prog;
+    const cc=invFromC+(invC-invFromC)*prog;
+    const p=cellCenter(rr,cc);
+
+    // Shake scales continuously with the rage ramp
+    const sh=Math.min(3.5,anger)*1.4;
+    const sx=sh?(Math.random()-0.5)*sh*2:0;
+    const sy=sh?(Math.random()-0.5)*sh*2:0;
+    drawInvader(p.x+sx, p.y+sy, ts);
+  }
+
+  // Scan line overlay (drawn after everything else so it's on top)
+  drawScanLine(ts);
+
+  // Bullets
+  bullets=bullets.filter(b=>{
+    b.x+=b.vx; b.y+=b.vy; b.life--;
+    if(b.life<=0) return false;
+    if(b.x<QX||b.x>QX+SIZE*MOD||b.y<QY||b.y>QY+SIZE*MOD) return false;
+    const col=Math.floor((b.x-QX)/MOD), row=Math.floor((b.y-QY)/MOD);
+    if(row>=0&&row<SIZE&&col>=0&&col<SIZE && alive[row][col]===1){
+      const shielded=mvpMode
+        ?!mvpExpendable.has(row+','+col)   // MVP: only expendable modules can break
+        :isProtected(row,col);              // Normal: protect finder corners
+      if(!shielded){
+        crumbleModule(row,col);
+        spawnParticles(QX+col*MOD+MOD/2, QY+row*MOD+MOD/2, true);
+        hits++;
+        updateMeter();
+      } else {
+        spawnParticles(QX+col*MOD+MOD/2, QY+row*MOD+MOD/2, false);
+      }
+      return false;
+    }
+    // draw bullet trail
+    ctx.fillStyle='#534AB7';
+    ctx.fillRect(b.x-2, b.y-2, 4, 4);
+    ctx.fillStyle='rgba(175,169,236,0.55)';
+    ctx.fillRect(b.x-1.5-b.vx*0.6, b.y-1.5-b.vy*0.6, 3, 3);
+    return true;
+  });
+
+  // Particles
+  particles=particles.filter(pa=>{
+    pa.x+=pa.vx; pa.y+=pa.vy; pa.life-=0.045;
+    ctx.globalAlpha=Math.max(0, pa.life);
+    ctx.fillStyle=pa.col;
+    ctx.fillRect(pa.x-2, pa.y-2, 4, 4);
+    ctx.globalAlpha=1;
+    return pa.life>0;
+  });
+
+  requestAnimationFrame(loop);
+}
+
+// Full-state reset for regenerating the maze with new text.
+// Rebuilds QR, reseeds invader, clears bullets/particles, replays the intro.
+function regenerateMaze(newText){
+  if(!newText) newText=DEFAULT_TEXT;
+  let next;
+  try{ next=buildMaze(newText); }
+  catch(e){
+    const st=document.getElementById('status');
+    const prev=st.textContent;
+    const prevCol=st.style.color;
+    st.textContent='ENCODE FAIL: '+(e.message||e);
+    st.style.color='#A32D2D';
+    setTimeout(()=>{st.textContent=prev;st.style.color=prevCol||'#1D9E75';},2500);
+    return;
+  }
+  mazeText=newText;
+  QR=next;
+  alive=QR.map(r=>[...r]);
+  debris=Array.from({length:SIZE},()=>Array.from({length:SIZE},()=>[]));
+  totalBlack=QR.flat().reduce((a,v)=>a+v,0);
+  hits=0; shots=0;
+  bullets=[]; particles=[];
+  anger=0; rageStart=0; gleeUntil=0; nextRageAt=0;
+  burstRemaining=0; burstNextAt=0;
+  landingShots=0; landingShotNext=0;
+  visited=Array.from({length:SIZE},()=>Array(SIZE).fill(false));
+  destroyedAtLastScan=0; lastScanReadable=null; lastScanPct=null;
+  mvpMode=false; mvpDone=false; mvpPhase=0; mvpWaitingForScan=false;
+  pendingMVPStart=false;
+  mvpExpendable.clear(); mvpIndestructible.clear();
+  intro=true; introStart=0; lastStep=0;
+  placeInvader();
+  updateMeter();
+  cacheOriginalScore();
+  setTerminalEmotion('determined');
+  try{
+    const u=new URL(location.href);
+    u.searchParams.set('q',newText);
+    history.replaceState(null,'',u.toString());
+  }catch(e){}
+}
+
+// ── QR export (original maze, not the partially destroyed version) ─────────
+function exportQR(format){
+  const px=parseInt(document.getElementById('export-size').value)||512;
+  const n=QR.length;
+  const quiet=4;
+  const mod=Math.floor(px/(n+quiet*2));
+  const total=(n+quiet*2)*mod;
+  if(format==='svg'){
+    let paths='';
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+      if(QR[r][c]) paths+='M'+((c+quiet)*mod)+' '+((r+quiet)*mod)+'h'+mod+'v'+mod+'h-'+mod+'z';
+    }
+    const svg='<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+total+' '+total+'" width="'+total+'" height="'+total+'"><rect width="'+total+'" height="'+total+'" fill="#fff"/><path d="'+paths+'" fill="#000"/></svg>';
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
+    a.download='qr-'+total+'px.svg';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } else {
+    const cv=document.createElement('canvas');
+    cv.width=total; cv.height=total;
+    const cx=cv.getContext('2d');
+    cx.fillStyle='#fff'; cx.fillRect(0,0,total,total);
+    cx.fillStyle='#000';
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+      if(QR[r][c]) cx.fillRect((c+quiet)*mod,(r+quiet)*mod,mod,mod);
+    }
+    cv.toBlob(b=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(b);
+      a.download='qr-'+total+'px.png';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    },'image/png');
+  }
+}
+document.getElementById('dl-svg').addEventListener('click',()=>exportQR('svg'));
+document.getElementById('dl-png').addEventListener('click',()=>exportQR('png'));
+
+// ── Auditable penalty scoring (same as qr-lab, inlined for independence) ────
+function scoreRule1(m){
+  const n=m.length;let p=0;
+  for(let r=0;r<n;r++){let run=1;for(let c=1;c<n;c++){if(m[r][c]===m[r][c-1])run++;else{if(run>=5)p+=3+(run-5);run=1;}}if(run>=5)p+=3+(run-5);}
+  for(let c=0;c<n;c++){let run=1;for(let r=1;r<n;r++){if(m[r][c]===m[r-1][c])run++;else{if(run>=5)p+=3+(run-5);run=1;}}if(run>=5)p+=3+(run-5);}
+  return p;
+}
+function scoreRule2(m){const n=m.length;let p=0;for(let r=0;r<n-1;r++)for(let c=0;c<n-1;c++){const v=m[r][c];if(v===m[r][c+1]&&v===m[r+1][c]&&v===m[r+1][c+1])p+=3;}return p;}
+function scoreRule3(m){
+  const n=m.length;let p=0;
+  const pats=[[1,0,1,1,1,0,1,0,0,0,0],[0,0,0,0,1,0,1,1,1,0,1]];
+  function mt(r,c,dr,dc,pat){for(let i=0;i<11;i++){const rr=r+dr*i,cc=c+dc*i;if(rr<0||rr>=n||cc<0||cc>=n)return false;if((m[rr][cc]?1:0)!==pat[i])return false;}return true;}
+  for(let r=0;r<n;r++)for(let c=0;c<=n-11;c++)for(const pat of pats)if(mt(r,c,0,1,pat))p+=40;
+  for(let c=0;c<n;c++)for(let r=0;r<=n-11;r++)for(const pat of pats)if(mt(r,c,1,0,pat))p+=40;
+  return p;
+}
+function scoreRule4(m){const n=m.length;let dk=0;for(let r=0;r<n;r++)for(let c=0;c<n;c++)if(m[r][c])dk++;return Math.floor(Math.abs((dk/(n*n))*100-50)/5)*10;}
+function scoreAll(m){const r1=scoreRule1(m),r2=scoreRule2(m),r3=scoreRule3(m),r4=scoreRule4(m);return{r1,r2,r3,r4,total:r1+r2+r3+r4};}
+
+// ── Module classifier for heatmap ───────────────────────────────────────────
+const ALIGN_POS=[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]];
+function classifyModules(n,ver){
+  const c=Array.from({length:n},()=>Array(n).fill('data'));
+  for(let i=0;i<n;i++){c[6][i]='timing';c[i][6]='timing';}
+  const pos=ALIGN_POS[ver-1]||[];
+  for(const pr of pos)for(const pc of pos){if((pr<9&&pc<9)||(pr<9&&pc>n-10)||(pr>n-10&&pc<9))continue;for(let dr=-2;dr<=2;dr++)for(let dc=-2;dc<=2;dc++){const rr=pr+dr,cc=pc+dc;if(rr>=0&&rr<n&&cc>=0&&cc<n)c[rr][cc]='alignment';}}
+  for(const[br,bc]of[[0,0],[0,n-7],[n-7,0]])for(let r=0;r<7;r++)for(let cc=0;cc<7;cc++)c[br+r][bc+cc]='finder';
+  for(let i=0;i<8;i++){['data','timing'].forEach(t=>{if(c[7][i]===t)c[7][i]='separator';if(c[i][7]===t)c[i][7]='separator';if(c[7][n-1-i]===t)c[7][n-1-i]='separator';if(c[i][n-8]===t)c[i][n-8]='separator';if(c[n-8][i]===t)c[n-8][i]='separator';if(c[n-1-i][7]===t)c[n-1-i][7]='separator';});}
+  for(let i=0;i<9;i++){if(i!==6&&c[8][i]!=='finder'&&c[8][i]!=='separator')c[8][i]='format';if(i!==6&&c[i][8]!=='finder'&&c[i][8]!=='separator')c[i][8]='format';}
+  for(let i=n-8;i<n;i++)if(c[8][i]!=='finder'&&c[8][i]!=='separator')c[8][i]='format';
+  for(let i=n-7;i<n;i++)if(c[i][8]!=='finder'&&c[i][8]!=='separator')c[i][8]='format';
+  if(ver>=1){const dr=4*ver+9;if(dr<n)c[dr][8]='dark';}
+  return c;
+}
+
+// ── SCAN feature ────────────────────────────────────────────────────────────
+let scanning=false, scanStartTs=0;
+const SCAN_MS=1500;
+let originalScore=null; // cached score of the undamaged QR
+
+function cacheOriginalScore(){
+  originalScore=scoreAll(QR);
+}
+
+function startScan(){
+  if(scanning) return;
+  scanning=true;
+  scanStartTs=performance.now();
+}
+
+function drawScanLine(ts){
+  if(!scanning) return;
+  const prog=Math.min(1,(ts-scanStartTs)/SCAN_MS);
+  const x=QX+prog*SIZE*MOD;
+  // green glow behind the line
+  ctx.fillStyle='rgba(29,158,117,0.06)';
+  ctx.fillRect(QX,QY,x-QX,SIZE*MOD);
+  // the line itself
+  ctx.strokeStyle='rgba(29,158,117,0.85)';
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(x,QY);
+  ctx.lineTo(x,QY+SIZE*MOD);
+  ctx.stroke();
+  // bright leading edge
+  ctx.strokeStyle='rgba(93,202,165,0.6)';
+  ctx.lineWidth=4;
+  ctx.beginPath();
+  ctx.moveTo(x,QY);
+  ctx.lineTo(x,QY+SIZE*MOD);
+  ctx.stroke();
+  if(prog>=1){
+    scanning=false;
+    showScanResults();
+  }
+}
+
+// ── Data placement: QR spec zigzag codeword map ─────────────────────────────
+// Walks the matrix in the spec-defined right-to-left 2-column zigzag, skipping
+// structural modules, and returns an ordered list of {r,c} positions. Every 8
+// consecutive positions form one codeword. For v3-L: D1..D55 then E1..E15.
+function computeDataPlacement(n,ver){
+  const types=classifyModules(n,ver);
+  const pos=[];
+  let upward=true;
+  for(let right=n-1;right>=1;right-=2){
+    if(right===6) right=5; // skip timing column
+    const rows=[];
+    for(let i=0;i<n;i++) rows.push(upward?n-1-i:i);
+    for(const row of rows){
+      for(const col of [right,right-1]){
+        if(col<0||col>=n) continue;
+        if(types[row][col]!=='data') continue;
+        pos.push({r:row,c:col});
+      }
+    }
+    upward=!upward;
+  }
+  return pos;
+}
+
+// Data/ECC codeword split for v3 by ECC level (spec table)
+const V3_CODEWORDS={L:{data:55,ecc:15},M:{data:44,ecc:26},Q:{data:34,ecc:36},H:{data:24,ecc:46}};
+
+// Per-cell metadata for hover tooltips — rebuilt each scan.
+let dmapInfo=null;
+let dmapCellPx=16, dmapQuiet=2;
+
+// ── Codeword annotation: decode what each data codeword represents ──────────
+// QR byte-mode data stream:  mode(4b) + count(8b) + payload(N×8b) + term(4b) + pad
+// The 12-bit header means payload bytes are 4 bits offset from codeword boundaries,
+// so each codeword typically bridges two adjacent characters.
+function annotateDataCW(cwIdx,text,dataCWCount){
+  const L=text.length;
+  const cwS=cwIdx*8, cwE=cwS+8;
+  // Stream regions (bit positions)
+  const mE=4;                       // mode ends
+  const cE=12;                      // count ends
+  const pE=12+L*8;                  // payload ends
+  const tE=Math.min(pE+4,dataCWCount*8); // terminator ends
+  const parts=[];
+
+  if(cwS<mE&&cwE>0)
+    parts.push('\u25B8 Mode: Byte (0100)');
+  if(cwS<cE&&cwE>mE)
+    parts.push('\u25B8 Char count: '+L);
+  if(cwS<pE&&cwE>cE){
+    const fBit=Math.max(cwS,cE), lBit=Math.min(cwE-1,pE-1);
+    const fCh=Math.floor((fBit-cE)/8), lCh=Math.floor((lBit-cE)/8);
+    const chars=[];
+    for(let i=fCh;i<=lCh&&i<L;i++){
+      const ch=text[i], code=text.charCodeAt(i);
+      const printable=code>=32&&code<=126;
+      const display=printable?'\u201C'+ch+'\u201D':'U+'+code.toString(16).toUpperCase().padStart(4,'0');
+      chars.push(display+' (0x'+code.toString(16).toUpperCase().padStart(2,'0')+')');
+    }
+    if(chars.length) parts.push('\u25B8 Payload: '+chars.join(', '));
+  }
+  if(cwS<tE&&cwE>pE)
+    parts.push('\u25B8 Terminator (0000)');
+  if(cwS>=tE){
+    const padStart=Math.ceil(tE/8);
+    const padIdx=cwIdx-padStart;
+    if(padIdx>=0) parts.push('\u25B8 Padding byte '+(padIdx%2===0?'0xEC':'0x11'));
+  }
+  if(!parts.length) parts.push('\u25B8 Data region');
+  return parts.join('\n');
+}
+
+const STRUCT_DESC={
+  finder:'Position Detection Pattern — one of three 7\u00d77 squares that help scanners locate and orient the QR code.',
+  separator:'Separator — 1-module white border around finder patterns, prevents interference with adjacent data.',
+  timing:'Timing Pattern — alternating dark/light strip on row 6 and column 6. Scanners use it to determine module spacing.',
+  alignment:'Alignment Pattern — 5\u00d75 square that helps compensate for image distortion and perspective (v2+).',
+  format:'Format Information — 15-bit sequence encoding the error correction level and mask pattern. Stored in two copies for redundancy.',
+  dark:'Dark Module — always-dark module at a fixed position, part of the QR specification structure.'
+};
+
+function renderDataMap(){
+  const n=SIZE;
+  const ver=(n-17)/4;
+  const pos=computeDataPlacement(n,ver);
+  const types=classifyModules(n,ver);
+  const split=V3_CODEWORDS['L']||{data:55,ecc:15};
+  const totalCW=split.data+split.ecc;
+
+  // Build codeword groups: each has 8 cell positions + byte value
+  const cwGroups=[];
+  for(let cw=0;cw<totalCW;cw++){
+    const cells=pos.slice(cw*8,cw*8+8);
+    let byte=0, dead=0;
+    for(let b=0;b<8;b++){
+      const {r,c}=cells[b]||{r:0,c:0};
+      const bit=QR[r]?.[c]?1:0;
+      byte=(byte<<1)|bit;
+      if(QR[r]?.[c]===1&&alive[r]?.[c]===0) dead++;
+    }
+    const isData=cw<split.data;
+    const label=isData?'D'+(cw+1):'E'+(cw-split.data+1);
+    const annotation=isData
+      ?annotateDataCW(cw,mazeText,split.data)
+      :'\u25B8 Reed-Solomon error correction byte '+(cw-split.data+1)+' of '+split.ecc+'.\nComputed from the '+split.data+' data codewords. Allows recovery of up to '+Math.floor(split.ecc/2)+' damaged codewords.';
+    cwGroups.push({
+      idx:cw,isData,label,cells,byte,
+      hex:'0x'+byte.toString(16).toUpperCase().padStart(2,'0'),
+      bin:byte.toString(2).padStart(8,'0'),
+      dead,annotation
+    });
+  }
+
+  // Build character → cell mapping for the interactive charmap
+  lastPos=pos;
+  buildCharMap(mazeText,pos);
+  renderCharBoxes(mazeText);
+
+  // Map cells → their codeword + build info grid
+  const cellLabel=Array.from({length:n},()=>Array(n).fill(''));
+  const cellType=Array.from({length:n},()=>Array(n).fill(''));
+  dmapInfo=Array.from({length:n},()=>Array(n).fill(null));
+
+  for(const cw of cwGroups){
+    for(const {r,c} of cw.cells){
+      cellLabel[r][c]=cw.label;
+      cellType[r][c]=(cw.isData?'d':'e')+(cw.idx%2);
+      const destroyed=QR[r][c]===1&&alive[r][c]===0;
+      const header=cw.isData
+        ?'Data Codeword '+cw.label+' \u2014 byte '+(cw.idx+1)+' of '+split.data
+        :'ECC '+cw.label+' \u2014 byte '+(cw.idx-split.data+1)+' of '+split.ecc;
+      dmapInfo[r][c]={
+        label:cw.label,
+        desc:header+'\n'+cw.annotation,
+        bits:'Bits: '+cw.bin+' ('+cw.hex+')',
+        destroyed,
+        deadNote:cw.dead>0?cw.dead+' of 8 bits destroyed in this codeword':null
+      };
+    }
+  }
+  // Structural cell info
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+    const t=types[r][c];
+    if(t!=='data'&&!dmapInfo[r][c]){
+      const destroyed=QR[r][c]===1&&alive[r][c]===0;
+      const short={finder:'FP',timing:'T',alignment:'AP',format:'FI',dark:'DM',separator:'SEP'};
+      dmapInfo[r][c]={
+        label:short[t]||t,
+        desc:STRUCT_DESC[t]||t,
+        bits:null,
+        destroyed,
+        deadNote:null
+      };
+    }
+  }
+
+  // Render canvas
+  const cellPx=dmapCellPx;
+  const quiet=dmapQuiet;
+  const total=(n+quiet*2)*cellPx;
+  const cv=document.getElementById('datamap');
+  cv.width=total; cv.height=total;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#f9f9f9'; ctx.fillRect(0,0,total,total);
+
+  const structColors={finder:'#1a1a2e',separator:'#d8d8e0',timing:'#4a4a6a',alignment:'#6a4a6a',format:'#c84b31',dark:'#2d6a4f'};
+  const dataColors={d0:'#bbdefb',d1:'#90caf9',e0:'#ffe0b2',e1:'#ffcc80'};
+
+  ctx.font='bold 6px ui-monospace,Menlo,monospace';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+    const bx=(c+quiet)*cellPx, by=(r+quiet)*cellPx;
+    const t=types[r][c];
+    const destroyed=QR[r][c]===1&&alive[r][c]===0;
+    if(t!=='data'){
+      ctx.fillStyle=destroyed?'rgba(226,75,74,0.35)':(structColors[t]||'#f0f0f0');
+      ctx.fillRect(bx,by,cellPx,cellPx);
+      ctx.fillStyle=t==='separator'||t==='format'?'#333':'#fff';
+      const labels={finder:'FP',timing:'T',alignment:'AP',format:'FI',dark:'DM',separator:''};
+      if(labels[t]) ctx.fillText(labels[t],bx+cellPx/2,by+cellPx/2);
+    } else {
+      const ct=cellType[r][c];
+      if(destroyed) ctx.fillStyle='rgba(226,75,74,0.3)';
+      else if(ct) ctx.fillStyle=dataColors[ct]||'#e3f2fd';
+      else ctx.fillStyle=QR[r][c]?'#e0e0e0':'#f9f9f9';
+      ctx.fillRect(bx,by,cellPx,cellPx);
+      const lbl=cellLabel[r][c];
+      if(lbl){
+        ctx.fillStyle=destroyed?'rgba(160,40,40,0.5)':(ct&&ct[0]==='e'?'#e65100':'#1565c0');
+        ctx.fillText(lbl,bx+cellPx/2,by+cellPx/2);
+      }
+    }
+    ctx.strokeStyle='rgba(0,0,0,0.08)';
+    ctx.lineWidth=0.5;
+    ctx.strokeRect(bx,by,cellPx,cellPx);
+  }
+}
+
+// ── Datamap hover tooltip ───────────────────────────────────────────────────
+function initDatamapHover(){
+  const cv=document.getElementById('datamap');
+  const tip=document.getElementById('datamap-tip');
+  let lastCell='';
+
+  function cellFromEvent(e){
+    const rect=cv.getBoundingClientRect();
+    const sx=e.clientX-rect.left, sy=e.clientY-rect.top;
+    const scale=cv.width/rect.width;
+    const px=sx*scale, py=sy*scale;
+    const c=Math.floor(px/dmapCellPx)-dmapQuiet;
+    const r=Math.floor(py/dmapCellPx)-dmapQuiet;
+    return {r,c};
+  }
+
+  function show(e){
+    if(!dmapInfo) return;
+    const {r,c}=cellFromEvent(e);
+    const key=r+','+c;
+    if(key===lastCell) return;
+    lastCell=key;
+    if(r<0||r>=SIZE||c<0||c>=SIZE||!dmapInfo[r][c]){
+      tip.classList.remove('on'); return;
+    }
+    const info=dmapInfo[r][c];
+    let html='<span class="lbl">['+info.label+'] ('+r+','+c+')</span>';
+    html+='<span class="desc">'+info.desc.replace(/\n/g,'<br>')+'</span>';
+    if(info.bits) html+='<br><span class="'+(info.label[0]==='E'?'ecc-bits':'bits')+'">'+info.bits+'</span>';
+    if(info.destroyed) html+='<span class="destroyed-tag">\u26A0 MODULE DESTROYED</span>';
+    if(info.deadNote) html+='<span class="destroyed-tag">'+info.deadNote+'</span>';
+    tip.innerHTML=html;
+    tip.classList.add('on');
+    // Position near cursor
+    const tx=Math.min(e.clientX+14,window.innerWidth-320);
+    const ty=Math.max(e.clientY-80,8);
+    tip.style.left=tx+'px';
+    tip.style.top=ty+'px';
+  }
+
+  function hide(){tip.classList.remove('on');lastCell='';}
+
+  cv.addEventListener('mousemove',show);
+  cv.addEventListener('mouseleave',hide);
+  cv.addEventListener('click',show); // mobile tap
+}
+initDatamapHover();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MVP MODE — Minimum Viable QR
+// Computes which codewords can be sacrificed while keeping the QR decodable,
+// then sets the invader to berserker mode: permanent angry, 3× speed, targeted
+// fire at expendable modules only. Indestructible modules are shielded.
+// ══════════════════════════════════════════════════════════════════════════════
+let mvpMode=false;
+let mvpDone=false;
+let mvpPhase=0;          // 0=off, 1=data/ECC, 2=structural-strict(phone-safe), 3=structural-lenient(software-only), 4=complete
+let mvpWaitingForScan=false;
+
+function setTermMsg(txt,color){
+  const el=document.getElementById('term-msg');
+  el.textContent=txt;
+  el.style.color=color||'#5DCAA5';
+}
+let mvpExpendable=new Set();     // "r,c" strings of cells OK to destroy
+let mvpIndestructible=new Set(); // "r,c" of cells that MUST survive
+let mvpFireNext=0;               // ts for next targeted shot
+const MVP_FIRE_INTERVAL=450;     // ms between targeted shots
+const MVP_STEP_FACTOR=3;         // speed multiplier
+
+function computeMVP(){
+  const n=SIZE, ver=(n-17)/4;
+  const pos=computeDataPlacement(n,ver);
+  const types=classifyModules(n,ver);
+  const split=V3_CODEWORDS['L']||{data:55,ecc:15};
+  const totalCW=split.data+split.ecc;
+  const maxErrors=Math.floor(split.ecc/2); // 7 for ECC-L with 15 ECC codewords
+
+  // Score each codeword by how many dark modules it has (maximize visual destruction)
+  const cwInfo=[];
+  for(let cw=0;cw<totalCW;cw++){
+    const cells=pos.slice(cw*8,cw*8+8);
+    let darkCount=0;
+    for(const {r,c} of cells) if(QR[r][c]===1) darkCount++;
+    cwInfo.push({cw,darkCount,cells});
+  }
+  // Sacrifice the codewords with the most dark modules
+  cwInfo.sort((a,b)=>b.darkCount-a.darkCount);
+  const sacrificed=new Set(cwInfo.slice(0,maxErrors).map(s=>s.cw));
+
+  const exp=new Set(), ind=new Set();
+  for(let cw=0;cw<totalCW;cw++){
+    const cells=pos.slice(cw*8,cw*8+8);
+    for(const {r,c} of cells){
+      const key=r+','+c;
+      if(sacrificed.has(cw)) exp.add(key); else ind.add(key);
+    }
+  }
+  // All structural modules are indestructible
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+    if(types[r][c]!=='data') ind.add(r+','+c);
+  }
+  return {expendable:exp,indestructible:ind,maxErrors,sacrificedCount:sacrificed.size};
+}
+
+function findNearestExpendableAlive(){
+  let best=null, bestD=Infinity;
+  for(const key of mvpExpendable){
+    const [r,c]=key.split(',').map(Number);
+    if(alive[r][c]!==1) continue;
+    const d=Math.abs(r-invR)+Math.abs(c-invC);
+    if(d<bestD){bestD=d;best={r,c};}
+  }
+  return best;
+}
+
+function fireAtTarget(target){
+  shots++;
+  document.getElementById('v-shots').textContent=shots;
+  const from=cellCenter(invR,invC);
+  const to=cellCenter(target.r,target.c);
+  const dx=to.x-from.x, dy=to.y-from.y;
+  const dist=Math.sqrt(dx*dx+dy*dy)||1;
+  const speed=6;
+  bullets.push({x:from.x,y:from.y,vx:dx/dist*speed,vy:dy/dist*speed,life:200});
+}
+
+function tickMVP(){
+  // Check if any expendable targets remain
+  let anyLeft=false;
+  for(const key of mvpExpendable){
+    const [r,c]=key.split(',').map(Number);
+    if(alive[r][c]===1){anyLeft=true;break;}
+  }
+  if(!anyLeft){
+    if(!mvpDone){
+      mvpDone=true;
+      mvpWaitingForScan=true;
+      anger=0;
+      gleeUntil=Infinity;
+      setTerminalEmotion('glee');
+      if(mvpPhase===1){
+        setTermMsg('SCAN NOW to verify readability!','#5DCAA5');
+      } else if(mvpPhase===2){
+        setTermMsg('PHONE-SCANNABLE MVP! Try your phone, then SCAN.','#5DCAA5');
+      } else if(mvpPhase===3){
+        setTermMsg('TRUE MINIMUM VIABLE QR (software-only limit)','#3ACBB8');
+        mvpPhase=4;
+        mvpWaitingForScan=false; // no auto-continue from here
+      }
+    }
+    return;
+  }
+
+  // BFS from invader through walkable (white) cells to find the nearest
+  // white cell adjacent to an expendable alive module, then trace back
+  // to get the first step along the shortest path.
+  const vis=Array.from({length:SIZE},()=>Array(SIZE).fill(false));
+  const par=Array.from({length:SIZE},()=>Array(SIZE).fill(null));
+  const q=[{r:invR,c:invC}];
+  vis[invR][invC]=true;
+  let goal=null;
+
+  while(q.length>0&&!goal){
+    const cur=q.shift();
+    for(let d=0;d<4;d++){
+      const nr=cur.r+DIRS[d][0], nc=cur.c+DIRS[d][1];
+      if(nr<0||nr>=SIZE||nc<0||nc>=SIZE||vis[nr][nc]) continue;
+      vis[nr][nc]=true;
+      par[nr][nc]={r:cur.r,c:cur.c};
+      // Is this neighbor an expendable alive module? (dark wall we want to destroy)
+      if(alive[nr][nc]===1&&mvpExpendable.has(nr+','+nc)){
+        goal={r:cur.r,c:cur.c}; // the white cell adjacent to the target
+        break;
+      }
+      // If walkable (white), keep searching
+      if(alive[nr][nc]===0) q.push({r:nr,c:nc});
+    }
+  }
+
+  if(!goal){ startRelocate(); return; } // unreachable — fly up and reland
+
+  // Trace back from goal to invader to find the first step
+  let step=goal;
+  while(par[step.r][step.c]&&!(par[step.r][step.c].r===invR&&par[step.r][step.c].c===invC)){
+    step=par[step.r][step.c];
+  }
+  // If goal IS the invader position (target is adjacent), don't move — just fire
+  if(step.r===invR&&step.c===invC) return;
+
+  invFromR=invR; invFromC=invC;
+  invR=step.r; invC=step.c;
+  moveStart=performance.now();
+}
+
+let pendingMVPStart=false;
+
+function startMVPAuto(){
+  mvpMode=true;
+  const mvp=computeMVP();
+  mvpExpendable=mvp.expendable;
+  mvpIndestructible=mvp.indestructible;
+  mvpDone=false;
+  mvpPhase=1;
+  mvpWaitingForScan=false;
+  mvpFireNext=performance.now()+600;
+  rageStart=0; burstRemaining=0;
+  anger=2.2;
+  gleeUntil=0;
+  setTerminalEmotion('angry');
+  setTermMsg('destroying expendable codewords...','#E24B4A');
+  aggroSlider.setValue(100);
+}
+
+// ── MVP Phase 2: empirical structural destruction via jsQR testing ──────────
+// Decode test at a given pixel-per-module scale.
+// 8px = lenient (software-only), 4px = strict (simulates phone conditions:
+// lower resolution forces jsQR to work harder, closer to real-world scanning).
+function testDecodeAtScale(pxPerMod){
+  const n=SIZE, quiet=4, total=(n+quiet*2)*pxPerMod;
+  const cv=document.createElement('canvas');
+  cv.width=total; cv.height=total;
+  const cx=cv.getContext('2d');
+  cx.fillStyle='#fff'; cx.fillRect(0,0,total,total);
+  cx.fillStyle='#000';
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++)
+    if(alive[r][c]) cx.fillRect((c+quiet)*pxPerMod,(r+quiet)*pxPerMod,pxPerMod,pxPerMod);
+  const img=cx.getImageData(0,0,total,total);
+  try{ const d=jsQR(img.data,total,total); return d&&d.data===mazeText; }
+  catch(e){ return false; }
+}
+function testDecode(){return testDecodeAtScale(8);}        // lenient
+function testDecodeStrict(){return testDecodeAtScale(4);}  // phone-safe
+
+function computeStructuralExpendable(testFn,protectFinders){
+  // Greedy: try destroying each structural dark module, test with the
+  // provided decoder function. Restore all afterward so the invader can
+  // crumble them visually. If protectFinders is true, skip finder pattern
+  // modules — real phone cameras are very sensitive to finder damage.
+  const types=classifyModules(SIZE,(SIZE-17)/4);
+  const candidates=[];
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+    if(types[r][c]==='data') continue;
+    if(alive[r][c]!==1) continue;
+    if(protectFinders&&types[r][c]==='finder') continue;
+    candidates.push({r,c});
+  }
+  for(let i=candidates.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [candidates[i],candidates[j]]=[candidates[j],candidates[i]];
+  }
+  const safe=[];
+  for(const {r,c} of candidates){
+    alive[r][c]=0;
+    if(testFn()) safe.push({r,c});
+    else alive[r][c]=1;
+  }
+  for(const {r,c} of safe) alive[r][c]=1;
+  return safe;
+}
+
+function startMVPPhase2(){
+  // Phase 2: strict test (phone-safe structural destruction)
+  document.getElementById('scan-modal').classList.remove('on');
+  setTerminalEmotion('angry');
+  setTermMsg('COMPUTING phone-safe structural limits...','#EF9F27');
+
+  setTimeout(()=>{
+    const structExp=computeStructuralExpendable(testDecodeStrict,true); // protect finders
+    for(const {r,c} of structExp){
+      mvpExpendable.add(r+','+c);
+      mvpIndestructible.delete(r+','+c);
+    }
+    mvpPhase=2;
+    mvpDone=false;
+    gleeUntil=0;
+    anger=2.5;
+    setTermMsg('destroying '+structExp.length+' phone-safe modules (finders preserved)!','#E24B4A');
+    mvpFireNext=performance.now()+600;
+  },150);
+}
+
+function startMVPPhase3(){
+  // Phase 3: lenient test (software-only, push past phone limits)
+  document.getElementById('scan-modal').classList.remove('on');
+  setTerminalEmotion('angry');
+  setTermMsg('PUSHING BEYOND phone limits...','#8B0000');
+
+  setTimeout(()=>{
+    const structExp=computeStructuralExpendable(testDecode,false); // finders are fair game
+    if(structExp.length===0){
+      // Nothing more to destroy — skip straight to complete
+      mvpPhase=4; mvpDone=true;
+      anger=0; gleeUntil=Infinity;
+      setTerminalEmotion('glee');
+      setTermMsg('TRUE MINIMUM VIABLE QR (software-only limit)','#3ACBB8');
+      return;
+    }
+    for(const {r,c} of structExp){
+      mvpExpendable.add(r+','+c);
+      mvpIndestructible.delete(r+','+c);
+    }
+    mvpPhase=3;
+    mvpDone=false;
+    gleeUntil=0;
+    anger=3.2;
+    setTermMsg('destroying '+structExp.length+' more modules (phones can\u2019t read this!)','#8B0000');
+    mvpFireNext=performance.now()+600;
+  },150);
+}
+
+// ── Character ↔ cell mapping: click a letter, see its bits in the QR ────────
+let charCellMap=[];   // charCellMap[i] = [{r,c},...] — 8 cells for char i
+let activeChars=new Set();
+let lastPos=null;     // stash pos array from last render
+
+function buildCharMap(text,pos){
+  charCellMap=[];
+  for(let i=0;i<text.length;i++){
+    const bitStart=12+i*8; // 12-bit header: mode(4)+count(8)
+    const cells=[];
+    for(let b=0;b<8;b++){
+      const idx=bitStart+b;
+      if(idx<pos.length) cells.push(pos[idx]);
+    }
+    charCellMap.push(cells);
+  }
+}
+
+function renderCharBoxes(text){
+  const wrap=document.getElementById('charmap');
+  wrap.innerHTML='';
+  activeChars.clear();
+  // Header indicator boxes
+  const hdr=document.createElement('span');
+  hdr.className='char-box head';
+  hdr.textContent='HDR';
+  hdr.title='Mode indicator (4b) + character count (8b) = 12-bit header';
+  wrap.appendChild(hdr);
+  // Character boxes
+  for(let i=0;i<text.length;i++){
+    const box=document.createElement('span');
+    box.className='char-box';
+    box.textContent=text[i];
+    box.title='Character '+(i+1)+': "'+text[i]+'" (0x'+text.charCodeAt(i).toString(16).toUpperCase()+')';
+    box.dataset.idx=i;
+    box.addEventListener('click',()=>toggleChar(i,box));
+    wrap.appendChild(box);
+  }
+}
+
+function toggleChar(idx,box){
+  if(activeChars.has(idx)){
+    activeChars.delete(idx);
+    box.classList.remove('on');
+  } else {
+    activeChars.add(idx);
+    box.classList.add('on');
+  }
+  drawConnections();
+}
+
+function drawConnections(){
+  const container=document.getElementById('charmap-container');
+  const cv=document.getElementById('connect-lines');
+  const dataCV=document.getElementById('datamap');
+  if(!container||!cv||!dataCV) return;
+
+  // Size overlay to cover the full container
+  const cRect=container.getBoundingClientRect();
+  cv.width=cRect.width;
+  cv.height=cRect.height;
+  cv.style.width=cRect.width+'px';
+  cv.style.height=cRect.height+'px';
+  const ctx=cv.getContext('2d');
+  ctx.clearRect(0,0,cv.width,cv.height);
+
+  if(activeChars.size===0) return;
+
+  // Canvas display mapping: datamap canvas coords → container-relative display coords
+  const dRect=dataCV.getBoundingClientRect();
+  const scaleX=dRect.width/dataCV.width;
+  const scaleY=dRect.height/dataCV.height;
+  const dOffX=dRect.left-cRect.left;
+  const dOffY=dRect.top-cRect.top;
+
+  // Color palette for multiple selections
+  const colors=['#1565c0','#c62828','#2e7d32','#6a1b9a','#e65100','#00838f','#ad1457','#33691e'];
+
+  let ci=0;
+  for(const idx of activeChars){
+    const cells=charCellMap[idx];
+    if(!cells||!cells.length) continue;
+    const color=colors[ci%colors.length];
+    ci++;
+
+    // Find the char-box element
+    const box=document.querySelector('.char-box[data-idx="'+idx+'"]');
+    if(!box) continue;
+    const bRect=box.getBoundingClientRect();
+    const bx=bRect.left-cRect.left+bRect.width/2;
+    const by=bRect.top-cRect.top+bRect.height;
+
+    // Highlight cells + draw lines
+    ctx.strokeStyle=color;
+    ctx.lineWidth=1.5;
+    ctx.setLineDash([4,3]);
+    ctx.globalAlpha=0.7;
+
+    for(const {r,c} of cells){
+      // Cell center in display coords
+      const cx=dOffX+(c+dmapQuiet)*dmapCellPx*scaleX+dmapCellPx*scaleX/2;
+      const cy=dOffY+(r+dmapQuiet)*dmapCellPx*scaleY+dmapCellPx*scaleY/2;
+      // Dashed line
+      ctx.beginPath();
+      ctx.moveTo(bx,by);
+      ctx.lineTo(cx,cy);
+      ctx.stroke();
+      // Highlight circle at cell
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(cx,cy,dmapCellPx*scaleX*0.6,0,Math.PI*2);
+      ctx.stroke();
+      ctx.setLineDash([4,3]);
+    }
+    ctx.globalAlpha=1;
+  }
+  ctx.setLineDash([]);
+}
+
+function showScanResults(){
+  if(!originalScore) cacheOriginalScore();
+  const currentMatrix=alive.map(r=>[...r]);
+  const cur=scoreAll(currentMatrix);
+  const orig=originalScore;
+
+  // jsQR decode
+  const n=SIZE, px=8, quiet=4, total=(n+quiet*2)*px;
+  const cv=document.createElement('canvas');
+  cv.width=total;cv.height=total;
+  const cx=cv.getContext('2d');
+  cx.fillStyle='#fff';cx.fillRect(0,0,total,total);
+  cx.fillStyle='#000';
+  for(let r=0;r<n;r++)for(let c=0;c<n;c++) if(alive[r][c]) cx.fillRect((c+quiet)*px,(r+quiet)*px,px,px);
+  const img=cx.getImageData(0,0,total,total);
+  let decodeHtml='';
+  try{
+    const d=jsQR(img.data,total,total);
+    if(!d) decodeHtml='<span class="bad">\u2717 unreadable — QR cannot be decoded</span>';
+    else {
+      const txt=d.data.slice(0,60)+(d.data.length>60?'\u2026':'');
+      const isUrl=/^https?:\/\//i.test(d.data);
+      decodeHtml=isUrl
+        ?'<span class="ok">\u2713 readable: <a href="'+d.data+'" target="_blank" rel="noopener" style="color:#1D9E75;text-decoration:underline">"'+txt+'"</a></span>'
+        :'<span class="ok">\u2713 readable: "'+txt+'"</span>';
+    }
+  }catch(e){decodeHtml='<span class="bad">\u2717 '+e.message+'</span>';}
+  document.getElementById('scan-decode').innerHTML=decodeHtml;
+
+  // Penalty table: original / current / delta
+  const tbody=document.getElementById('scan-tbody');
+  function row(label,s,cls){return '<tr'+(cls?' class="'+cls+'"':'')+'><td>'+label+'</td><td>'+s.r1+'</td><td>'+s.r2+'</td><td>'+s.r3+'</td><td>'+s.r4+'</td><td>'+s.total+'</td></tr>';}
+  const delta={r1:cur.r1-orig.r1,r2:cur.r2-orig.r2,r3:cur.r3-orig.r3,r4:cur.r4-orig.r4,total:cur.total-orig.total};
+  const fmt=v=>v>=0?'+'+v:''+v;
+  tbody.innerHTML=row('Original',orig,'')+row('Current',cur,'')+
+    '<tr class="delta"><td>Delta</td><td>'+fmt(delta.r1)+'</td><td>'+fmt(delta.r2)+'</td><td>'+fmt(delta.r3)+'</td><td>'+fmt(delta.r4)+'</td><td>'+fmt(delta.total)+'</td></tr>';
+
+  // Render the data placement map (replaces the old simple heatmap)
+  renderDataMap();
+
+  // Update the readability header with scan results
+  const destroyed=countDestroyed();
+  const pctAlive=Math.max(0,Math.round((1-destroyed/totalBlack)*100));
+  lastScanReadable=!!decodeHtml.includes('readable:');
+  lastScanPct=pctAlive;
+  destroyedAtLastScan=destroyed;
+  updateMeter();
+
+  document.getElementById('scan-modal').classList.add('on');
+
+  // MVP: scan at a phase boundary → trigger the next phase
+  if(mvpWaitingForScan&&lastScanReadable){
+    mvpWaitingForScan=false;
+    const nextFn=mvpPhase===1?startMVPPhase2:mvpPhase===2?startMVPPhase3:null;
+    if(nextFn) setTimeout(nextFn,2500);
+  }
+}
+
+document.getElementById('scan-btn').addEventListener('click',startScan);
+document.getElementById('scan-close').addEventListener('click',()=>{
+  document.getElementById('scan-modal').classList.remove('on');
+});
+
+// ── Aggro slider ─────────────────────────────────────────────────────────────
+function aggroColor(pct){
+  if(pct<=20) return '#3ACBB8';
+  if(pct<=40) return '#7F77DD';
+  if(pct<=70) return '#EF9F27';
+  return pct<=85?'#E24B4A':'#A32D2D';
+}
+
+// Block-track slider: discrete clickable/draggable blocks with color coding
+function createBlockSlider(trackEl,valEl,min,max,step,initial,formatter,onChange){
+  const steps=Math.round((max-min)/step);
+  const blocks=[];
+  for(let i=0;i<=steps;i++){
+    const blk=document.createElement('div');
+    blk.classList.add('blk');
+    trackEl.appendChild(blk);
+    blocks.push(blk);
+  }
+  let currentIdx=Math.round((initial-min)/step);
+
+  function render(){
+    const val=min+currentIdx*step;
+    const pct=Math.round(((val-min)/(max-min))*100);
+    const col=aggroColor(pct);
+    for(let i=0;i<=steps;i++){
+      const on=i<=currentIdx;
+      blocks[i].classList.toggle('on',on);
+      blocks[i].classList.toggle('tip',i===currentIdx);
+      blocks[i].style.background=on?col:'#e0e0e0';
+    }
+    valEl.textContent=formatter(val);
+    valEl.style.color=col;
+  }
+
+  function setFromX(clientX){
+    const rect=trackEl.getBoundingClientRect();
+    const x=Math.max(0,Math.min(clientX-rect.left,rect.width));
+    currentIdx=Math.round((x/rect.width)*steps);
+    render();
+  }
+
+  let dragging=false;
+  trackEl.addEventListener('mousedown',e=>{dragging=true;setFromX(e.clientX);});
+  window.addEventListener('mousemove',e=>{if(dragging)setFromX(e.clientX);});
+  window.addEventListener('mouseup',()=>{if(dragging){dragging=false;onChange(min+currentIdx*step);}});
+  trackEl.addEventListener('touchstart',e=>{e.preventDefault();dragging=true;setFromX(e.touches[0].clientX);},{passive:false});
+  trackEl.addEventListener('touchmove',e=>{e.preventDefault();if(dragging)setFromX(e.touches[0].clientX);},{passive:false});
+  trackEl.addEventListener('touchend',()=>{if(dragging){dragging=false;onChange(min+currentIdx*step);}});
+
+  render();
+  return {
+    getValue(){return min+currentIdx*step;},
+    setValue(v){currentIdx=Math.round((v-min)/step);render();onChange(v);}
+  };
+}
+
+const aggroSlider=createBlockSlider(
+  document.getElementById('aggro-track'),
+  document.getElementById('aggro-pct'),
+  0,100,5,100,
+  v=>Math.round(v)+'%',
+  v=>{aggroFactor=v/100;}
+);
+aggroFactor=1.0;
+
+placeInvader();
+updateMeter();
+cacheOriginalScore();
+setTerminalEmotion('determined');
+
+const mazeTextEl=document.getElementById('maze-text');
+mazeTextEl.value=mazeText;
+document.getElementById('maze-go').addEventListener('click',()=>regenerateMaze(mazeTextEl.value));
+mazeTextEl.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();regenerateMaze(mazeTextEl.value);}
+});
+
+document.getElementById('share').addEventListener('click',async()=>{
+  const btn=document.getElementById('share');
+  try{
+    await navigator.clipboard.writeText(location.href);
+    const prev=btn.textContent;
+    btn.textContent='[ copied! ]';
+    btn.classList.add('copied');
+    setTimeout(()=>{btn.textContent=prev;btn.classList.remove('copied');},1400);
+  }catch(e){
+    btn.textContent='[ failed ]';
+    setTimeout(()=>{btn.textContent='[ deep link ]';},1400);
+  }
+});
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
