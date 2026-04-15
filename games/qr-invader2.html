@@ -266,6 +266,12 @@ let intro=true;
 let introStart=0;
 const INTRO_MS=4000;
 
+// Relocate: when stuck with no walkable neighbors, fly up and reland elsewhere.
+let relocating=false;
+let relocateStart=0;
+let relocateFromR=0, relocateFromC=0;
+const RELOCATE_MS=1400; // 0.7s fly up + 0.7s descend
+
 function isProtected(r,c){
   return (r<=6&&c<=6)||(r<=6&&c>=22)||(r>=22&&c<=6);
 }
@@ -286,6 +292,38 @@ function cellCenter(r,c){
   return {x:QX+c*MOD+MOD/2, y:QY+r*MOD+MOD/2};
 }
 
+function startRelocate(){
+  relocateFromR=invR; relocateFromC=invC;
+  placeInvader(); // picks a new valid white cell
+  relocating=true;
+  relocateStart=performance.now();
+}
+
+function renderRelocate(ts){
+  const prog=Math.min(1,(ts-relocateStart)/RELOCATE_MS);
+  const from=cellCenter(relocateFromR,relocateFromC);
+  const to=cellCenter(invR,invC);
+  const topY=QY-20; // fly above the QR
+
+  let x,y,s;
+  if(prog<0.5){
+    // Fly up from old position, shrinking
+    const t=prog/0.5;
+    const ease=t*t; // ease-in: accelerating upward
+    x=from.x;
+    y=from.y+(topY-from.y)*ease;
+    s=Math.max(1,Math.round(1+(3-1)*ease)); // 1→3 (grows as it "approaches camera")
+  } else {
+    // Descend to new position, shrinking back
+    const t=(prog-0.5)/0.5;
+    const ease=1-Math.pow(1-t,2); // ease-out: decelerating landing
+    x=from.x+(to.x-from.x)*ease;
+    y=topY+(to.y-topY)*ease;
+    s=Math.max(1,Math.round(3-(3-1)*ease)); // 3→1
+  }
+  drawIntroInvader(x,y,s,6+s*2);
+}
+
 function tick(){
   // Freeze in place while raging or bursting.
   if(rageStart>0||burstRemaining>0) return;
@@ -297,7 +335,7 @@ function tick(){
     if(nr<0||nr>=SIZE||nc<0||nc>=SIZE||alive[nr][nc]===1) continue;
     cands.push({d,nr,nc,v:visited[nr][nc]});
   }
-  if(cands.length===0) return;
+  if(cands.length===0){ startRelocate(); return; }
 
   const unvis=cands.filter(c=>!c.v);
   const pool=unvis.length>0?unvis:cands;
@@ -543,7 +581,14 @@ function loop(ts){
     anger=2.5;
   }
 
-  if(!intro){
+  // Relocate: check completion
+  if(relocating&&ts-relocateStart>=RELOCATE_MS){
+    relocating=false;
+    moveStart=ts; invFromR=invR; invFromC=invC;
+    lastStep=ts;
+  }
+
+  if(!intro&&!relocating){
     if(!lastStep) lastStep=ts;
     const stepMs=mvpMode?Math.round(STEP_MS/MVP_STEP_FACTOR):STEP_MS;
     if(ts-lastStep>=stepMs){
@@ -554,7 +599,7 @@ function loop(ts){
     if(mvpMode&&!mvpDone&&ts>=mvpFireNext){
       const tgt=findNearestExpendableAlive();
       if(tgt){fireAtTarget(tgt);mvpFireNext=ts+MVP_FIRE_INTERVAL;}
-      anger=2.2+(Math.sin(ts*0.008)*0.5); // fluctuate between frustrated and angry
+      anger=2.2+(Math.sin(ts*0.008)*0.5);
     }
 
     // Landing burst: fire 2 quick shots right after touchdown.
@@ -616,6 +661,8 @@ function loop(ts){
 
   if(intro){
     renderIntro(ts,introProg);
+  } else if(relocating){
+    renderRelocate(ts);
   } else {
     // Lerp invader position toward current cell
     const prog=Math.min(1,(ts-moveStart)/STEP_MS);
@@ -1192,7 +1239,7 @@ function tickMVP(){
     }
   }
 
-  if(!goal) return; // unreachable (shouldn't happen in a connected maze)
+  if(!goal){ startRelocate(); return; } // unreachable — fly up and reland
 
   // Trace back from goal to invader to find the first step
   let step=goal;
