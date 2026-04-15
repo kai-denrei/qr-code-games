@@ -1138,7 +1138,7 @@ initDatamapHover();
 // ══════════════════════════════════════════════════════════════════════════════
 let mvpMode=false;
 let mvpDone=false;
-let mvpPhase=0;          // 0=off, 1=data/ECC destruction, 2=structural, 3=complete
+let mvpPhase=0;          // 0=off, 1=data/ECC, 2=structural-strict(phone-safe), 3=structural-lenient(software-only), 4=complete
 let mvpWaitingForScan=false;
 
 function setTermMsg(txt,color){
@@ -1217,22 +1217,21 @@ function tickMVP(){
     if(alive[r][c]===1){anyLeft=true;break;}
   }
   if(!anyLeft){
-    if(mvpPhase===1&&!mvpWaitingForScan){
-      // Phase 1 done — prompt user to scan
+    if(!mvpDone){
       mvpDone=true;
       mvpWaitingForScan=true;
       anger=0;
       gleeUntil=Infinity;
       setTerminalEmotion('glee');
-      setTermMsg('SCAN NOW to verify readability!','#5DCAA5');
-    } else if(mvpPhase===2&&!mvpDone){
-      // Phase 2 done — TRUE minimum viable QR!
-      mvpDone=true;
-      anger=0;
-      gleeUntil=Infinity;
-      setTerminalEmotion('glee');
-      setTermMsg('TRUE MINIMUM VIABLE QR achieved! Scan to verify.','#3ACBB8');
-      mvpPhase=3;
+      if(mvpPhase===1){
+        setTermMsg('SCAN NOW to verify readability!','#5DCAA5');
+      } else if(mvpPhase===2){
+        setTermMsg('PHONE-SCANNABLE MVP! Try your phone, then SCAN.','#5DCAA5');
+      } else if(mvpPhase===3){
+        setTermMsg('TRUE MINIMUM VIABLE QR (software-only limit)','#3ACBB8');
+        mvpPhase=4;
+        mvpWaitingForScan=false; // no auto-continue from here
+      }
     }
     return;
   }
@@ -1327,30 +1326,34 @@ function toggleMVP(){
 document.getElementById('mvp-btn').addEventListener('click',toggleMVP);
 
 // ── MVP Phase 2: empirical structural destruction via jsQR testing ──────────
-function testDecode(){
-  const n=SIZE, px=8, quiet=4, total=(n+quiet*2)*px;
+// Decode test at a given pixel-per-module scale.
+// 8px = lenient (software-only), 4px = strict (simulates phone conditions:
+// lower resolution forces jsQR to work harder, closer to real-world scanning).
+function testDecodeAtScale(pxPerMod){
+  const n=SIZE, quiet=4, total=(n+quiet*2)*pxPerMod;
   const cv=document.createElement('canvas');
   cv.width=total; cv.height=total;
   const cx=cv.getContext('2d');
   cx.fillStyle='#fff'; cx.fillRect(0,0,total,total);
   cx.fillStyle='#000';
   for(let r=0;r<n;r++) for(let c=0;c<n;c++)
-    if(alive[r][c]) cx.fillRect((c+quiet)*px,(r+quiet)*px,px,px);
+    if(alive[r][c]) cx.fillRect((c+quiet)*pxPerMod,(r+quiet)*pxPerMod,pxPerMod,pxPerMod);
   const img=cx.getImageData(0,0,total,total);
   try{ const d=jsQR(img.data,total,total); return d&&d.data===mazeText; }
   catch(e){ return false; }
 }
+function testDecode(){return testDecodeAtScale(8);}        // lenient
+function testDecodeStrict(){return testDecodeAtScale(4);}  // phone-safe
 
-function computeStructuralExpendable(){
-  // Greedy: try destroying each structural dark module, test with jsQR.
-  // If still readable, mark it expendable. Restore all afterward so the
-  // invader can crumble them visually.
+function computeStructuralExpendable(testFn){
+  // Greedy: try destroying each structural dark module, test with the
+  // provided decoder function. Restore all afterward so the invader can
+  // crumble them visually.
   const types=classifyModules(SIZE,(SIZE-17)/4);
   const candidates=[];
   for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
     if(types[r][c]!=='data'&&alive[r][c]===1) candidates.push({r,c});
   }
-  // Shuffle for variety (different patterns each run)
   for(let i=candidates.length-1;i>0;i--){
     const j=Math.floor(Math.random()*(i+1));
     [candidates[i],candidates[j]]=[candidates[j],candidates[i]];
@@ -1358,21 +1361,21 @@ function computeStructuralExpendable(){
   const safe=[];
   for(const {r,c} of candidates){
     alive[r][c]=0;
-    if(testDecode()) safe.push({r,c});
-    else alive[r][c]=1; // restore — too critical
+    if(testFn()) safe.push({r,c});
+    else alive[r][c]=1;
   }
-  // Restore all safe ones so invader can crumble them with visual effect
   for(const {r,c} of safe) alive[r][c]=1;
   return safe;
 }
 
 function startMVPPhase2(){
+  // Phase 2: strict test (phone-safe structural destruction)
   document.getElementById('scan-modal').classList.remove('on');
   setTerminalEmotion('angry');
-  setTermMsg('COMPUTING structural vulnerabilities...','#EF9F27');
+  setTermMsg('COMPUTING phone-safe structural limits...','#EF9F27');
 
   setTimeout(()=>{
-    const structExp=computeStructuralExpendable();
+    const structExp=computeStructuralExpendable(testDecodeStrict);
     for(const {r,c} of structExp){
       mvpExpendable.add(r+','+c);
       mvpIndestructible.delete(r+','+c);
@@ -1381,9 +1384,38 @@ function startMVPPhase2(){
     mvpDone=false;
     gleeUntil=0;
     anger=2.5;
-    setTermMsg('WHAT! destroying '+structExp.length+' structural modules too!','#E24B4A');
+    setTermMsg('destroying '+structExp.length+' phone-safe structural modules!','#E24B4A');
     mvpFireNext=performance.now()+600;
-  },150); // let UI update before heavy computation
+  },150);
+}
+
+function startMVPPhase3(){
+  // Phase 3: lenient test (software-only, push past phone limits)
+  document.getElementById('scan-modal').classList.remove('on');
+  setTerminalEmotion('angry');
+  setTermMsg('PUSHING BEYOND phone limits...','#8B0000');
+
+  setTimeout(()=>{
+    const structExp=computeStructuralExpendable(testDecode);
+    if(structExp.length===0){
+      // Nothing more to destroy — skip straight to complete
+      mvpPhase=4; mvpDone=true;
+      anger=0; gleeUntil=Infinity;
+      setTerminalEmotion('glee');
+      setTermMsg('TRUE MINIMUM VIABLE QR (software-only limit)','#3ACBB8');
+      return;
+    }
+    for(const {r,c} of structExp){
+      mvpExpendable.add(r+','+c);
+      mvpIndestructible.delete(r+','+c);
+    }
+    mvpPhase=3;
+    mvpDone=false;
+    gleeUntil=0;
+    anger=3.2;
+    setTermMsg('destroying '+structExp.length+' more modules (phones can\u2019t read this!)','#8B0000');
+    mvpFireNext=performance.now()+600;
+  },150);
 }
 
 // ── Character ↔ cell mapping: click a letter, see its bits in the QR ────────
@@ -1555,11 +1587,11 @@ function showScanResults(){
 
   document.getElementById('scan-modal').classList.add('on');
 
-  // MVP: if phase 1 just completed and scan confirms readable → trigger phase 2
+  // MVP: scan at a phase boundary → trigger the next phase
   if(mvpWaitingForScan&&lastScanReadable){
     mvpWaitingForScan=false;
-    // Let the user see the scan result for 2.5s, then auto-close and start phase 2
-    setTimeout(startMVPPhase2,2500);
+    const nextFn=mvpPhase===1?startMVPPhase2:mvpPhase===2?startMVPPhase3:null;
+    if(nextFn) setTimeout(nextFn,2500);
   }
 }
 
