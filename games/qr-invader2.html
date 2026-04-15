@@ -52,12 +52,12 @@ canvas{display:block;max-width:100%;height:auto}
 .sc-l{font-size:9px;color:#888}
 .sc-v{font-size:14px;font-weight:500;color:#111}
 #aggro-wrap{display:flex;align-items:center;gap:6px;flex:1;max-width:260px}
-#aggro-label{font-family:'Press Start 2P',ui-monospace,monospace;font-size:8px;color:#888;display:flex;align-items:center;gap:4px;white-space:nowrap}
-#aggro-bar{letter-spacing:.04em;font-size:10px;transition:color .2s}
-#aggro-pct{color:#aaa;min-width:28px;text-align:right;font-size:8px}
-#aggro{-webkit-appearance:none;appearance:none;flex:1;height:6px;background:#eee;border-radius:3px;outline:none;cursor:pointer;min-width:60px}
-#aggro::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:12px;height:12px;background:var(--thumb-color,#7F77DD);border-radius:3px;cursor:pointer;border:none}
-#aggro::-moz-range-thumb{width:12px;height:12px;background:var(--thumb-color,#7F77DD);border-radius:3px;cursor:pointer;border:none}
+#aggro-lbl{font-family:'Press Start 2P',ui-monospace,monospace;font-size:8px;color:#888;white-space:nowrap}
+#aggro-pct{font-family:'Press Start 2P',ui-monospace,monospace;color:#aaa;min-width:32px;text-align:right;font-size:8px;transition:color .15s}
+.block-track{display:flex;gap:1px;cursor:pointer;height:10px;flex:1;min-width:60px;touch-action:none}
+.block-track .blk{flex:1;background:#e0e0e0;height:100%;transition:background .06s}
+.block-track .blk.on{background:#7F77DD}
+.block-track .blk.on.tip{filter:brightness(1.3)}
 
 /* controls row: maze input + export */
 #controls{display:flex;gap:4px;width:100%;max-width:600px;align-items:center;flex-wrap:wrap}
@@ -130,8 +130,9 @@ tr.delta td{color:#A32D2D;font-size:11px}
       <div class="sc"><div class="sc-l">fired</div><div class="sc-v" id="v-shots">0</div></div>
     </div>
     <div id="aggro-wrap">
-      <div id="aggro-label">aggro <span id="aggro-bar">&#9646;&#9646;&#9646;&#9646;&#9646;&#9646;&#9647;&#9647;&#9647;&#9647;&#9647;&#9647;</span> <span id="aggro-pct">50%</span></div>
-      <input id="aggro" type="range" min="0" max="100" value="50">
+      <span id="aggro-lbl">aggro</span>
+      <div class="block-track" id="aggro-track"></div>
+      <span id="aggro-pct">50%</span>
     </div>
   </div>
   <div id="hint">autonomous demo</div>
@@ -1282,11 +1283,9 @@ let preMvpAggro=50; // stash the slider value before MVP to restore on exit
 function toggleMVP(){
   mvpMode=!mvpMode;
   const btn=document.getElementById('mvp-btn');
-  const slider=document.getElementById('aggro');
   if(mvpMode){
     btn.classList.add('on');
     btn.textContent='MVP ON';
-    // Compute the minimum viable set
     const mvp=computeMVP();
     mvpExpendable=mvp.expendable;
     mvpIndestructible=mvp.indestructible;
@@ -1294,16 +1293,13 @@ function toggleMVP(){
     mvpPhase=1;
     mvpWaitingForScan=false;
     mvpFireNext=performance.now()+600;
-    // Cancel any normal rage state
     rageStart=0; burstRemaining=0; landingShots=0;
     anger=2.2;
     gleeUntil=0;
     setTerminalEmotion('angry');
     setTermMsg('destroying expendable codewords...','#E24B4A');
-    // Max aggro
-    preMvpAggro=parseInt(slider.value);
-    slider.value=100;
-    updateAggro();
+    preMvpAggro=aggroSlider.getValue();
+    aggroSlider.setValue(100);
   } else {
     btn.classList.remove('on');
     btn.textContent='mvp?';
@@ -1317,9 +1313,7 @@ function toggleMVP(){
     scheduleNextRage(performance.now());
     setTerminalEmotion('determined');
     setTermMsg('');
-    // Restore previous aggro
-    slider.value=preMvpAggro;
-    updateAggro();
+    aggroSlider.setValue(preMvpAggro);
   }
 }
 
@@ -1345,14 +1339,18 @@ function testDecodeAtScale(pxPerMod){
 function testDecode(){return testDecodeAtScale(8);}        // lenient
 function testDecodeStrict(){return testDecodeAtScale(4);}  // phone-safe
 
-function computeStructuralExpendable(testFn){
+function computeStructuralExpendable(testFn,protectFinders){
   // Greedy: try destroying each structural dark module, test with the
   // provided decoder function. Restore all afterward so the invader can
-  // crumble them visually.
+  // crumble them visually. If protectFinders is true, skip finder pattern
+  // modules — real phone cameras are very sensitive to finder damage.
   const types=classifyModules(SIZE,(SIZE-17)/4);
   const candidates=[];
   for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
-    if(types[r][c]!=='data'&&alive[r][c]===1) candidates.push({r,c});
+    if(types[r][c]==='data') continue;
+    if(alive[r][c]!==1) continue;
+    if(protectFinders&&types[r][c]==='finder') continue;
+    candidates.push({r,c});
   }
   for(let i=candidates.length-1;i>0;i--){
     const j=Math.floor(Math.random()*(i+1));
@@ -1375,7 +1373,7 @@ function startMVPPhase2(){
   setTermMsg('COMPUTING phone-safe structural limits...','#EF9F27');
 
   setTimeout(()=>{
-    const structExp=computeStructuralExpendable(testDecodeStrict);
+    const structExp=computeStructuralExpendable(testDecodeStrict,true); // protect finders
     for(const {r,c} of structExp){
       mvpExpendable.add(r+','+c);
       mvpIndestructible.delete(r+','+c);
@@ -1384,7 +1382,7 @@ function startMVPPhase2(){
     mvpDone=false;
     gleeUntil=0;
     anger=2.5;
-    setTermMsg('destroying '+structExp.length+' phone-safe structural modules!','#E24B4A');
+    setTermMsg('destroying '+structExp.length+' phone-safe modules (finders preserved)!','#E24B4A');
     mvpFireNext=performance.now()+600;
   },150);
 }
@@ -1396,7 +1394,7 @@ function startMVPPhase3(){
   setTermMsg('PUSHING BEYOND phone limits...','#8B0000');
 
   setTimeout(()=>{
-    const structExp=computeStructuralExpendable(testDecode);
+    const structExp=computeStructuralExpendable(testDecode,false); // finders are fair game
     if(structExp.length===0){
       // Nothing more to destroy — skip straight to complete
       mvpPhase=4; mvpDone=true;
@@ -1602,26 +1600,68 @@ document.getElementById('scan-close').addEventListener('click',()=>{
 
 // ── Aggro slider ─────────────────────────────────────────────────────────────
 function aggroColor(pct){
-  // 0%=teal → 40%=purple → 70%=orange → 100%=red
-  if(pct<=40) return pct<=20?'#3ACBB8':'#7F77DD';
+  if(pct<=20) return '#3ACBB8';
+  if(pct<=40) return '#7F77DD';
   if(pct<=70) return '#EF9F27';
   return pct<=85?'#E24B4A':'#A32D2D';
 }
-function updateAggro(){
-  const v=parseInt(document.getElementById('aggro').value);
-  aggroFactor=v/100;
-  const filled=Math.round(v/100*12);
-  const bar=document.getElementById('aggro-bar');
-  bar.textContent='\u25AE'.repeat(filled)+'\u25AF'.repeat(12-filled);
-  const col=aggroColor(v);
-  bar.style.color=col;
-  document.getElementById('aggro-pct').textContent=v+'%';
-  document.getElementById('aggro-pct').style.color=col;
-  // Tint the slider thumb via CSS custom property
-  document.getElementById('aggro').style.setProperty('--thumb-color',col);
+
+// Block-track slider: discrete clickable/draggable blocks with color coding
+function createBlockSlider(trackEl,valEl,min,max,step,initial,formatter,onChange){
+  const steps=Math.round((max-min)/step);
+  const blocks=[];
+  for(let i=0;i<=steps;i++){
+    const blk=document.createElement('div');
+    blk.classList.add('blk');
+    trackEl.appendChild(blk);
+    blocks.push(blk);
+  }
+  let currentIdx=Math.round((initial-min)/step);
+
+  function render(){
+    const val=min+currentIdx*step;
+    const pct=Math.round(((val-min)/(max-min))*100);
+    const col=aggroColor(pct);
+    for(let i=0;i<=steps;i++){
+      const on=i<=currentIdx;
+      blocks[i].classList.toggle('on',on);
+      blocks[i].classList.toggle('tip',i===currentIdx);
+      blocks[i].style.background=on?col:'#e0e0e0';
+    }
+    valEl.textContent=formatter(val);
+    valEl.style.color=col;
+  }
+
+  function setFromX(clientX){
+    const rect=trackEl.getBoundingClientRect();
+    const x=Math.max(0,Math.min(clientX-rect.left,rect.width));
+    currentIdx=Math.round((x/rect.width)*steps);
+    render();
+  }
+
+  let dragging=false;
+  trackEl.addEventListener('mousedown',e=>{dragging=true;setFromX(e.clientX);});
+  window.addEventListener('mousemove',e=>{if(dragging)setFromX(e.clientX);});
+  window.addEventListener('mouseup',()=>{if(dragging){dragging=false;onChange(min+currentIdx*step);}});
+  trackEl.addEventListener('touchstart',e=>{e.preventDefault();dragging=true;setFromX(e.touches[0].clientX);},{passive:false});
+  trackEl.addEventListener('touchmove',e=>{e.preventDefault();if(dragging)setFromX(e.touches[0].clientX);},{passive:false});
+  trackEl.addEventListener('touchend',()=>{if(dragging){dragging=false;onChange(min+currentIdx*step);}});
+
+  render();
+  return {
+    getValue(){return min+currentIdx*step;},
+    setValue(v){currentIdx=Math.round((v-min)/step);render();onChange(v);}
+  };
 }
-document.getElementById('aggro').addEventListener('input',updateAggro);
-updateAggro();
+
+const aggroSlider=createBlockSlider(
+  document.getElementById('aggro-track'),
+  document.getElementById('aggro-pct'),
+  0,100,5,50,
+  v=>Math.round(v)+'%',
+  v=>{aggroFactor=v/100;}
+);
+aggroFactor=0.5;
 
 placeInvader();
 updateMeter();
